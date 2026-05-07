@@ -480,11 +480,25 @@ function detectInAppBrowser(){
    PAGE HINT MODALS (ส่งผลงาน / ประเมิน / ตัดสิน)
    ============================================================ */
 /* Show a non-blocking hint using a separate overlay so it doesn't conflict with the main modal */
+function _hintSnoozeKey(type){ return `hint_snooze_${type}`; }
+function _todayStr(){ return new Date().toISOString().slice(0,10); } // "YYYY-MM-DD"
+
+function isHintSnoozedToday(type){
+  try{ return localStorage.getItem(_hintSnoozeKey(type)) === _todayStr(); }
+  catch(e){ return false; }
+}
+
+function snoozeHintToday(type){
+  try{ localStorage.setItem(_hintSnoozeKey(type), _todayStr()); }
+  catch(e){}
+}
+
 function showPageHint(type){
   const hint = state.settings.hints?.[type];
   if(!hint || !hint.enabled) return;
+  if(isHintSnoozedToday(type)) return;   // ← ข้ามถ้าผู้ใช้เลือกไม่แสดงวันนี้
+
   const lines = (hint.body||'').replace(/\n/g,'<br>');
-  // Use a separate DOM element so it doesn't hijack #modalBg
   let overlay = document.getElementById('hintOverlay');
   if(!overlay){
     overlay = document.createElement('div');
@@ -496,18 +510,27 @@ function showPageHint(type){
     <div style="background:#fff;border-radius:14px;width:100%;max-width:480px;box-shadow:0 18px 50px rgba(140,114,51,.18);animation:slideUp .3s;overflow:hidden">
       <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:linear-gradient(135deg,var(--cream),#fff)">
         <div style="font-weight:700;color:var(--gold-deep);font-size:16px">${esc(hint.title||'')}</div>
-        <button onclick="closeHintOverlay()" style="width:32px;height:32px;border-radius:50%;background:var(--cream);border:none;cursor:pointer;display:grid;place-items:center;color:var(--ink-soft);font-size:16px;font-family:inherit">✕</button>
+        <button onclick="closeHintOverlay(false)" style="width:32px;height:32px;border-radius:50%;background:var(--cream);border:none;cursor:pointer;display:grid;place-items:center;color:var(--ink-soft);font-size:16px;font-family:inherit">✕</button>
       </div>
-      <div style="padding:18px 20px;font-size:14px;color:var(--ink);line-height:1.8">${lines}</div>
-      <div style="padding:0 20px 18px;display:flex;justify-content:flex-end">
-        <button onclick="closeHintOverlay()" style="padding:10px 24px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;font-weight:600;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-size:14px">รับทราบ</button>
+      <div style="padding:18px 20px 12px;font-size:14px;color:var(--ink);line-height:1.8">${lines}</div>
+      <div style="padding:10px 20px 18px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--ink-soft);user-select:none">
+          <input type="checkbox" id="hintSnoozeChk" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer">
+          ไม่ต้องแสดงอีกในวันนี้
+        </label>
+        <button onclick="closeHintOverlay('${type}')" style="padding:10px 24px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;font-weight:600;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-size:14px">รับทราบ</button>
       </div>
     </div>
   `;
   overlay.style.display = 'flex';
 }
 
-function closeHintOverlay(){
+function closeHintOverlay(type){
+  // If type provided and checkbox checked → snooze for today
+  if(type){
+    const chk = document.getElementById('hintSnoozeChk');
+    if(chk && chk.checked) snoozeHintToday(type);
+  }
   const overlay = document.getElementById('hintOverlay');
   if(overlay) overlay.style.display = 'none';
 }
