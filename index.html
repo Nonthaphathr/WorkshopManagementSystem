@@ -189,6 +189,21 @@
   .badge-progress{background:#fff3cd;color:#856404}
   .badge-pending{background:#e2e3e5;color:#383d41}
 
+  /* Judge responsive */
+  .judge-cards{display:grid;gap:12px}
+  .judge-card{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:14px 16px;transition:.2s}
+  .judge-card:hover{border-color:var(--gold-light);box-shadow:var(--shadow)}
+  .judge-card-top{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
+  .judge-card-num{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold-light),var(--gold));color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;flex-shrink:0}
+  .judge-card-info{flex:1;min-width:0}
+  .judge-card-name{font-weight:700;font-size:15px;color:var(--ink);margin-bottom:3px}
+  .judge-card-school{font-size:13px;color:var(--ink-soft);margin-bottom:2px}
+  .judge-card-work{font-size:13px;color:var(--gold-deep);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .judge-card-actions{display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .judge-view-btn{display:flex;align-items:center;gap:5px;padding:8px 14px;background:var(--cream);border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:500;color:var(--gold-dark);cursor:pointer;font-family:inherit;flex-shrink:0}
+  .judge-view-btn:hover{background:var(--gold);color:#fff;border-color:var(--gold)}
+  .judge-rank-wrap{display:flex;align-items:center;gap:8px;margin-left:auto}
+
   /* Footer */
   footer{text-align:center;padding:30px 20px;font-size:12px;color:var(--ink-soft);border-top:1px solid var(--line);margin-top:40px;background:var(--cream)}
   footer .dev{font-weight:600;color:var(--gold-dark)}
@@ -335,6 +350,25 @@ const DEFAULT_OPEN_QS = [
 
 const RATING_LABELS = ['น้อยที่สุด','น้อย','ปานกลาง','มาก','มากที่สุด'];
 
+/* Default modal hint messages */
+const DEFAULT_HINTS = {
+  submit: {
+    enabled: true,
+    title: '📤 วิธีการส่งผลงาน',
+    body: '1. เลือกฐานที่คุณเข้าร่วม\n2. กรอกชื่อ-นามสกุล, โรงเรียน, และรายละเอียดผลงาน\n3. แนบไฟล์ผลงาน (ถ้ามี) ในรูปแบบ .pdf, .docx, .png หรือ .jpg\n4. ตรวจสอบข้อมูลให้ถูกต้อง แล้วกดปุ่ม "ส่งผลงาน"\n\n⚠️ ระบบจะบันทึกข้อมูลอัตโนมัติ หากหน้าจอปิดระหว่างกรอก สามารถกลับมากรอกต่อได้',
+  },
+  evaluate: {
+    enabled: true,
+    title: '⭐ วิธีการประเมินความพึงพอใจ',
+    body: '1. เลือกเพศ ระดับชั้น โรงเรียน และฐานที่เข้าร่วม\n2. ให้คะแนนความพึงพอใจในแต่ละด้าน (1-5)\n3. กรอกข้อคิดเห็นเพิ่มเติม (ถ้ามี)\n4. กดปุ่ม "ส่งแบบประเมิน"\n\n💛 ขอบคุณที่ร่วมประเมินเพื่อพัฒนากิจกรรมในครั้งต่อไป',
+  },
+  judge: {
+    enabled: true,
+    title: '🏆 วิธีการตรวจและตัดสินผลงาน',
+    body: '1. เลือกฐานที่ต้องการตัดสิน\n2. คลิกไอคอน 👁 เพื่อดูผลงานแต่ละชิ้น\n3. กำหนดลำดับที่ (1, 2, 3...) ในช่องขวามือของแต่ละผลงาน\n4. กด "บันทึกผลการตัดสิน" เมื่อตัดสินครบทุกผลงาน\n\n⚠️ ลำดับที่ซ้ำกันจะถูกแจ้งเตือน กรุณาตรวจสอบก่อนบันทึก',
+  },
+};
+
 /* ============================================================
    STATE
    ============================================================ */
@@ -348,6 +382,7 @@ const state = {
     openQuestions: DEFAULT_OPEN_QS,
     appsScriptUrl:'',
     lineGroupUrl:'',
+    hints: JSON.parse(JSON.stringify(DEFAULT_HINTS)),
   },
   isAdmin: false,
 };
@@ -383,6 +418,69 @@ function toast(msg, type='ok'){
 
 function showLoader(container, text='กำลังโหลด...'){
   container.innerHTML = `<div class="loading-state"><div class="loader" style="border-color:var(--gold);border-top-color:transparent"></div><div style="margin-top:10px">${text}</div></div>`;
+}
+
+/* ============================================================
+   IN-APP BROWSER DETECTION
+   ============================================================ */
+function detectInAppBrowser(){
+  const ua = navigator.userAgent || '';
+  if(/Line\/|FBAN|FBAV|FB_IAB|Instagram|Messenger/i.test(ua)){
+    const isLine = /Line\//i.test(ua);
+    const app = isLine ? 'LINE' : 'Facebook / Messenger';
+    Swal.fire({
+      icon: 'warning',
+      title: '⚠️ แนะนำให้เปิดบนบราวเซอร์ภายนอก',
+      html: `<div style="font-family:'Sarabun',sans-serif;font-size:14px;line-height:1.7;color:#444;text-align:left">
+        ขณะนี้คุณเปิดระบบจาก <b>${app}</b> ซึ่งอาจทำให้<br>
+        • การอัปโหลดไฟล์ทำงานไม่สมบูรณ์<br>
+        • บางฟังก์ชันอาจผิดพลาดได้<br><br>
+        <b>แนะนำให้เปิดบน:</b><br>
+        🌐 บราวเซอร์ภายนอก (Chrome / Safari)<br>
+        📱 หรือกด <b>"เปิดในแอป (inApp)"</b> แล้วเลือกเปิดใน Chrome
+      </div>`,
+      confirmButtonText: 'เข้าใจแล้ว ไปต่อ',
+      confirmButtonColor: '#C9A961',
+      showCancelButton: false,
+      allowOutsideClick: true,
+    });
+  }
+}
+
+/* ============================================================
+   PAGE HINT MODALS (ส่งผลงาน / ประเมิน / ตัดสิน)
+   ============================================================ */
+/* Show a non-blocking hint using a separate overlay so it doesn't conflict with the main modal */
+function showPageHint(type){
+  const hint = state.settings.hints?.[type];
+  if(!hint || !hint.enabled) return;
+  const lines = (hint.body||'').replace(/\n/g,'<br>');
+  // Use a separate DOM element so it doesn't hijack #modalBg
+  let overlay = document.getElementById('hintOverlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'hintOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(45,38,18,.55);backdrop-filter:blur(4px);z-index:150;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:480px;box-shadow:0 18px 50px rgba(140,114,51,.18);animation:slideUp .3s;overflow:hidden">
+      <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:linear-gradient(135deg,var(--cream),#fff)">
+        <div style="font-weight:700;color:var(--gold-deep);font-size:16px">${esc(hint.title||'')}</div>
+        <button onclick="closeHintOverlay()" style="width:32px;height:32px;border-radius:50%;background:var(--cream);border:none;cursor:pointer;display:grid;place-items:center;color:var(--ink-soft);font-size:16px;font-family:inherit">✕</button>
+      </div>
+      <div style="padding:18px 20px;font-size:14px;color:var(--ink);line-height:1.8">${lines}</div>
+      <div style="padding:0 20px 18px;display:flex;justify-content:flex-end">
+        <button onclick="closeHintOverlay()" style="padding:10px 24px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;font-weight:600;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-size:14px">รับทราบ</button>
+      </div>
+    </div>
+  `;
+  overlay.style.display = 'flex';
+}
+
+function closeHintOverlay(){
+  const overlay = document.getElementById('hintOverlay');
+  if(overlay) overlay.style.display = 'none';
 }
 
 /* ============================================================
@@ -448,6 +546,11 @@ async function loadAllData(){
       openQuestions: s.openQuestions || DEFAULT_OPEN_QS,
       appsScriptUrl: s.appsScriptUrl || '',
       lineGroupUrl: s.lineGroupUrl || '',
+      hints: s.hints ? {
+        submit:   { ...DEFAULT_HINTS.submit,   ...(s.hints.submit   || {}) },
+        evaluate: { ...DEFAULT_HINTS.evaluate, ...(s.hints.evaluate || {}) },
+        judge:    { ...DEFAULT_HINTS.judge,    ...(s.hints.judge    || {}) },
+      } : JSON.parse(JSON.stringify(DEFAULT_HINTS)),
     };
     state.currentEventId = s.currentEventId || (state.events[0]?.id || null);
   } else {
@@ -472,6 +575,7 @@ async function saveSettings(){
     openQuestions: state.settings.openQuestions,
     appsScriptUrl: state.settings.appsScriptUrl,
     lineGroupUrl: state.settings.lineGroupUrl,
+    hints: state.settings.hints,
     currentEventId: state.currentEventId,
   }, {merge:true});
 }
@@ -671,6 +775,7 @@ function renderSubmitList(app){
       </div>
     </div>
   `;
+  setTimeout(()=>showPageHint('submit'), 300);
 }
 
 function renderSubmitForm(app, stationKey){
@@ -948,6 +1053,7 @@ function renderEvaluate(app){
       </form>
     </div>
   `;
+  setTimeout(()=>showPageHint('evaluate'), 300);
 
   document.getElementById('evalForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -1279,6 +1385,14 @@ function showSettingsMenu(){
         <button class="settings-item" onclick="showClearDataMenu()" style="border-color:#fee2e2">
           <svg class="settings-icon" width="22" height="22" fill="none" stroke="#c43d3d" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
           <div class="settings-text"><div class="settings-title" style="color:#c43d3d">ล้างข้อมูลในระบบ</div><div class="settings-desc">ลบผลงาน / ผลประเมิน / ผลตัดสิน</div></div>
+        </button>
+        <button class="settings-item" onclick="showJudgeLinkMenu()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+          <div class="settings-text"><div class="settings-title">คัดลอกลิงก์ระบบตัดสินผลงาน</div><div class="settings-desc">ข้อความพร้อมส่งให้วิทยากร</div></div>
+        </button>
+        <button class="settings-item" onclick="showHintsSettings()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <div class="settings-text"><div class="settings-title">ตั้งค่าข้อความแนะนำหน้า</div><div class="settings-desc">Modal แนะนำ ส่งผลงาน / ประเมิน / ตัดสิน</div></div>
         </button>
       </div>
     </div>
@@ -2117,6 +2231,7 @@ async function renderJudgeList(app){
         </button>`;
       }).join('')}
     </div>`;
+  setTimeout(()=>showPageHint('judge'), 300);
 }
 
 /* ============================================================
@@ -2157,50 +2272,87 @@ async function renderJudgeStation(app, stationId){
   window._judgeSubsMap = {};
   subs.forEach(s => { window._judgeSubsMap[s.id] = s; });
 
+  function isMobile(){ return window.innerWidth <= 680; }
+
   function renderTable(){
     const total = subs.length;
     const status = judgeStatus(subs, { rankings });
+    const mobile = isMobile();
+
+    const rankSel = (subId) => `
+      <select class="rank-sel" data-subid="${subId}"
+        style="padding:${mobile?'9px 12px':'6px 10px'};border:1px solid var(--line);border-radius:8px;
+               font-size:${mobile?'15':'13'}px;font-family:inherit;background:var(--white);cursor:pointer;color:var(--ink);min-width:${mobile?'80':'auto'}px">
+        <option value="0"${getRank(subId)===0?' selected':''}>—</option>
+        ${Array.from({length:total},(_,k)=>`<option value="${k+1}"${getRank(subId)===k+1?' selected':''}>${k+1}</option>`).join('')}
+      </select>`;
+
+    const viewBtn = (subId) => `
+      <button onclick="showWorkModal('${subId}')"
+        class="${mobile?'judge-view-btn':''}"
+        style="${mobile?'':'background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--gold-dark);font-family:inherit;font-size:13px;display:inline-flex;align-items:center;gap:5px'}"
+        title="คลิกเพื่อดูผลงาน">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+        </svg>
+        คลิกเพื่อดูผลงาน
+      </button>`;
+
+    const bodyHTML = mobile
+      ? `<div class="judge-cards">
+          ${subs.map((s,i) => `
+            <div class="judge-card">
+              <div class="judge-card-top">
+                <div class="judge-card-num">${i+1}</div>
+                <div class="judge-card-info">
+                  <div class="judge-card-name">${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</div>
+                  <div class="judge-card-school">🏫 ${esc(s.school||'-')}</div>
+                  <div class="judge-card-work">📝 ${esc(s.workTitle||s.work||'-')}</div>
+                </div>
+              </div>
+              <div class="judge-card-actions">
+                ${viewBtn(s.id)}
+                <div class="judge-rank-wrap">
+                  <span style="font-size:13px;color:var(--ink-soft);font-weight:500">ลำดับที่:</span>
+                  ${rankSel(s.id)}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>`
+      : `<div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>ชื่อ-นามสกุล</th><th>โรงเรียน</th><th>ชื่อผลงาน</th>
+                <th style="text-align:center">ดูผลงาน</th>
+                <th style="text-align:center;min-width:100px">ลำดับที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${subs.map((s,i) => `
+                <tr>
+                  <td>${i+1}</td>
+                  <td>${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</td>
+                  <td>${esc(s.school||'-')}</td>
+                  <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                      title="${esc(s.workTitle||s.work||'')}">${esc(s.workTitle||s.work||'-')}</td>
+                  <td style="text-align:center">${viewBtn(s.id)}</td>
+                  <td style="text-align:center">${rankSel(s.id)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+
     document.getElementById('judgeStationContent').innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         ${badgeHTML(status)}
         <span style="font-size:13px;color:var(--ink-soft)">ผลงานทั้งหมด ${total} รายการ</span>
         <button class="btn" id="judgeSaveBtn" style="margin-left:auto;padding:8px 18px;font-size:13px">💾 บันทึกผลการตัดสิน</button>
       </div>
-      <div class="table-wrap">
-        <table id="judgeTable">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>ชื่อ-นามสกุล</th>
-              <th>โรงเรียน</th>
-              <th>ชื่อผลงาน</th>
-              <th style="text-align:center">ดูผลงาน</th>
-              <th style="text-align:center;min-width:100px">ลำดับที่</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${subs.map((s,i) => `
-              <tr id="jrow_${s.id}">
-                <td>${i+1}</td>
-                <td>${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</td>
-                <td>${esc(s.school||'-')}</td>
-                <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.workTitle||s.work||'')}">${esc(s.workTitle||s.work||'-')}</td>
-                <td style="text-align:center">
-                  <button onclick="showWorkModal('${s.id}')" style="background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--gold-dark)" title="ดูผลงาน">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                  </button>
-                </td>
-                <td style="text-align:center">
-                  <select class="rank-sel" data-subid="${s.id}" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;background:var(--white);cursor:pointer;color:var(--ink)">
-                    <option value="0"${getRank(s.id)===0?' selected':''}>—</option>
-                    ${Array.from({length:total},(_,k)=>`<option value="${k+1}"${getRank(s.id)===k+1?' selected':''}>${k+1}</option>`).join('')}
-                  </select>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
+      ${bodyHTML}`;
 
     // Rank change handler
     document.querySelectorAll('.rank-sel').forEach(sel => {
@@ -2208,7 +2360,7 @@ async function renderJudgeStation(app, stationId){
         const subId = sel.dataset.subid;
         rankings[subId] = parseInt(sel.value);
         _judgeState.unsaved = true;
-        renderTable(); // re-render to update badge
+        renderTable();
       });
     });
 
@@ -2305,6 +2457,123 @@ function exportJudgingExcel(ev, station, subs, rankings){
   toast('ดาวน์โหลด Excel แล้ว ✓');
 }
 
+/* ----- Judge Link Menu ----- */
+function showJudgeLinkMenu(){
+  const modal = document.getElementById('modal');
+  const ev = getCurrentEvent();
+  const judgeUrl = `${location.origin}${location.pathname}#judge`;
+
+  // Build one message block per station
+  const stationBlocks = (ev?.stations||[]).map(st => {
+    const stUrl = `${location.origin}${location.pathname}#judge-station/${st.id}`;
+    return `เรียน ท่านวิทยากรประจำ${st.name}\n\nขอความร่วมมือท่านเข้าไปตรวจสอบผลงาน และตัดสินให้อันดับคุณภาพผลงานของนักเรียนในฐานของท่าน ตามลิงก์นี้\n\n${stUrl}\n\nขอบคุณครับ/ค่ะ`;
+  }).join('\n\n' + '─'.repeat(40) + '\n\n');
+
+  const template = stationBlocks || `เรียน ท่านวิทยากรประจำฐาน\n\nขอความร่วมมือท่านเข้าไปตรวจสอบผลงาน และตัดสินให้อันดับคุณภาพผลงานของนักเรียนในฐานของท่าน ตามลิงก์นี้\n\n${judgeUrl}\n\nขอบคุณครับ/ค่ะ`;
+
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">🔗 ลิงก์ระบบตัดสินผลงาน</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:6px">ลิงก์หน้าหลักระบบตัดสิน:</div>
+      <div style="background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px;word-break:break-all;color:var(--gold-deep);font-weight:600;margin-bottom:14px">${esc(judgeUrl)}</div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">ข้อความพร้อมส่งแยกตามฐาน (แก้ไขได้):</div>
+      <div style="font-size:11px;color:var(--gold-dark);margin-bottom:8px">💡 แต่ละฐานมีลิงก์ตรงเข้าฐานของตัวเองเลย</div>
+      <textarea id="judgeLinkMsg" class="textarea" style="min-height:220px;font-size:13px;line-height:1.9">${esc(template)}</textarea>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-block" onclick="copyJudgeLink()">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          คัดลอกข้อความทั้งหมด
+        </button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+}
+
+function copyJudgeLink(){
+  const txt = document.getElementById('judgeLinkMsg').value;
+  navigator.clipboard.writeText(txt).then(()=>{
+    Swal.fire({ icon:'success', title:'คัดลอกแล้ว!', text:'นำไปวางใน LINE หรือช่องทางอื่นได้เลย', timer:2000, timerProgressBar:true, showConfirmButton:false, confirmButtonColor:'#C9A961' });
+  }).catch(()=>{
+    document.getElementById('judgeLinkMsg').select();
+    document.execCommand('copy');
+    toast('คัดลอกแล้ว ✓');
+  });
+}
+
+/* ----- Hints Settings ----- */
+function showHintsSettings(){
+  const modal = document.getElementById('modal');
+  const h = state.settings.hints;
+  const hintRows = [
+    { key:'submit',   label:'📤 หน้าส่งผลงาน' },
+    { key:'evaluate', label:'⭐ หน้าประเมินความพึงพอใจ' },
+    { key:'judge',    label:'🏆 หน้าตัดสินผลงาน' },
+  ];
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">ตั้งค่าข้อความแนะนำหน้า</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px">กำหนดข้อความที่จะแสดงเมื่อผู้ใช้เปิดแต่ละหน้า สามารถเปิด-ปิดได้ตามต้องการ</p>
+      ${hintRows.map(({key,label})=>`
+        <div style="background:var(--cream);border-radius:12px;padding:14px 16px;margin-bottom:12px;border:1px solid var(--line)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-weight:700;font-size:14px;color:var(--gold-deep)">${label}</div>
+            <label class="toggle" title="เปิด/ปิด modal แนะนำ">
+              <input type="checkbox" id="hintEnabled_${key}" ${h[key].enabled?'checked':''} onchange="toggleHintPreview('${key}')">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div id="hintFields_${key}" style="${h[key].enabled?'':'display:none'}">
+            <div class="form-row" style="margin-bottom:8px">
+              <label style="font-size:12px">หัวข้อ</label>
+              <input class="input" id="hintTitle_${key}" value="${esc(h[key].title||'')}" style="font-size:13px;padding:8px 12px">
+            </div>
+            <div class="form-row" style="margin-bottom:0">
+              <label style="font-size:12px">เนื้อหา <span style="font-weight:400;color:var(--ink-soft)">(ขึ้นบรรทัดใหม่ด้วย Enter)</span></label>
+              <textarea class="textarea" id="hintBody_${key}" style="font-size:13px;min-height:100px">${esc(h[key].body||'')}</textarea>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+      <div class="btn-row">
+        <button class="btn" onclick="saveHintsSettings()">บันทึกการตั้งค่า</button>
+        <button class="btn btn-ghost" onclick="resetHintsToDefault()">รีเซ็ตเป็นค่าเริ่มต้น</button>
+      </div>
+    </div>
+  `;
+}
+
+function toggleHintPreview(key){
+  const enabled = document.getElementById(`hintEnabled_${key}`).checked;
+  document.getElementById(`hintFields_${key}`).style.display = enabled ? '' : 'none';
+}
+
+async function saveHintsSettings(){
+  ['submit','evaluate','judge'].forEach(key=>{
+    state.settings.hints[key] = {
+      enabled: document.getElementById(`hintEnabled_${key}`).checked,
+      title: document.getElementById(`hintTitle_${key}`)?.value.trim() || '',
+      body:  document.getElementById(`hintBody_${key}`)?.value || '',
+    };
+  });
+  await saveSettings();
+  toast('บันทึกการตั้งค่า Modal แนะนำแล้ว ✓');
+  showSettingsMenu();
+}
+
+async function resetHintsToDefault(){
+  state.settings.hints = JSON.parse(JSON.stringify(DEFAULT_HINTS));
+  await saveSettings();
+  toast('รีเซ็ตข้อความแนะนำแล้ว');
+  showHintsSettings();
+}
+
 /* ----- Clear Data Menu ----- */
 function showClearDataMenu(){
   const modal = document.getElementById('modal');
@@ -2399,6 +2668,7 @@ async function confirmClearData(type){
    ============================================================ */
 async function init(){
   showLoader(document.getElementById('app'), 'กำลังเชื่อมต่อระบบ...');
+  detectInAppBrowser();
   try{
     await loadAllData();
     render();
