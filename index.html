@@ -213,6 +213,14 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .loading-state{text-align:center;padding:40px;color:var(--ink-soft)}
 
+  /* Save button pulse animation */
+  @keyframes savePulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}60%{box-shadow:0 0 0 12px rgba(34,197,94,0)}}
+  .judge-save-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-weight:700;border-radius:12px;font-size:16px;border:none;cursor:pointer;font-family:inherit;transition:.2s;margin-top:18px}
+  .judge-save-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(34,197,94,.35)}
+  .judge-save-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none;animation:none}
+  .judge-save-btn.unsaved{animation:savePulse 1.4s infinite;box-shadow:0 4px 18px rgba(34,197,94,.4)}
+  .judge-save-btn.saved{background:linear-gradient(135deg,#6b7280,#4b5563);animation:none}
+
   /* Event selector */
   .event-select{padding:8px 12px;background:#fff;border:1px solid var(--gold-light);border-radius:8px;font-size:13px;color:var(--gold-deep);font-weight:500;max-width:100%}
 
@@ -425,26 +433,47 @@ function showLoader(container, text='กำลังโหลด...'){
    ============================================================ */
 function detectInAppBrowser(){
   const ua = navigator.userAgent || '';
-  if(/Line\/|FBAN|FBAV|FB_IAB|Instagram|Messenger/i.test(ua)){
-    const isLine = /Line\//i.test(ua);
-    const app = isLine ? 'LINE' : 'Facebook / Messenger';
-    Swal.fire({
-      icon: 'warning',
-      title: '⚠️ แนะนำให้เปิดบนบราวเซอร์ภายนอก',
-      html: `<div style="font-family:'Sarabun',sans-serif;font-size:14px;line-height:1.7;color:#444;text-align:left">
-        ขณะนี้คุณเปิดระบบจาก <b>${app}</b> ซึ่งอาจทำให้<br>
-        • การอัปโหลดไฟล์ทำงานไม่สมบูรณ์<br>
-        • บางฟังก์ชันอาจผิดพลาดได้<br><br>
-        <b>แนะนำให้เปิดบน:</b><br>
-        🌐 บราวเซอร์ภายนอก (Chrome / Safari)<br>
-        📱 หรือกด <b>"เปิดในแอป (inApp)"</b> แล้วเลือกเปิดใน Chrome
-      </div>`,
-      confirmButtonText: 'เข้าใจแล้ว ไปต่อ',
-      confirmButtonColor: '#C9A961',
-      showCancelButton: false,
-      allowOutsideClick: true,
-    });
-  }
+  if(!/Line\/|FBAN|FBAV|FB_IAB|Instagram|Messenger/i.test(ua)) return;
+  const isLine    = /Line\//i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  const isIOS     = /iPhone|iPad|iPod/i.test(ua);
+  const app       = isLine ? 'LINE' : 'Facebook / Messenger';
+  const currentUrl = location.href;
+
+  Swal.fire({
+    icon: 'warning',
+    title: '⚠️ แนะนำเปิดบราวเซอร์ภายนอก',
+    html: `<div style="font-family:'Sarabun',sans-serif;font-size:14px;line-height:1.75;color:#444;text-align:left">
+      ขณะนี้คุณเปิดระบบจาก <b>${app}</b> ซึ่งอาจทำให้<br>
+      • การอัปโหลดไฟล์ทำงานไม่สมบูรณ์<br>
+      • บางฟังก์ชันอาจผิดพลาดได้<br><br>
+      แนะนำให้เปิดบน <b>Chrome</b> หรือ <b>Safari</b> เพื่อประสบการณ์ที่ดีที่สุด
+    </div>`,
+    showCancelButton: true,
+    confirmButtonText: '🌐 เปิดบราวเซอร์ภายนอก',
+    cancelButtonText: 'เข้าใจแล้ว อยู่ต่อ',
+    confirmButtonColor: '#2563eb',
+    cancelButtonColor: '#C9A961',
+    reverseButtons: false,
+    allowOutsideClick: true,
+  }).then(result => {
+    if(!result.isConfirmed) return;
+    if(isAndroid){
+      // Try Chrome intent on Android; fallback after 800 ms
+      const intentUrl = 'intent://' + currentUrl.replace(/^https?:\/\//,'') +
+        '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' +
+        encodeURIComponent(currentUrl) + ';end';
+      location.href = intentUrl;
+      setTimeout(()=>{ window.open(currentUrl,'_blank'); }, 800);
+    } else if(isIOS){
+      // iOS: try x-safari / googlechrome scheme, fallback to _blank
+      const chromeUrl = currentUrl.replace(/^https?/,'googlechrome');
+      window.location = chromeUrl;
+      setTimeout(()=>{ window.open(currentUrl,'_blank'); }, 600);
+    } else {
+      window.open(currentUrl,'_blank');
+    }
+  });
 }
 
 /* ============================================================
@@ -2350,9 +2379,14 @@ async function renderJudgeStation(app, stationId){
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         ${badgeHTML(status)}
         <span style="font-size:13px;color:var(--ink-soft)">ผลงานทั้งหมด ${total} รายการ</span>
-        <button class="btn" id="judgeSaveBtn" style="margin-left:auto;padding:8px 18px;font-size:13px">💾 บันทึกผลการตัดสิน</button>
       </div>
-      ${bodyHTML}`;
+      ${bodyHTML}
+      <div style="padding-top:14px;border-top:1px solid var(--line)">
+        <button id="judgeSaveBtn" class="judge-save-btn ${_judgeState.unsaved?'unsaved':'saved'}">
+          💾 บันทึกผลการตัดสิน
+          ${_judgeState.unsaved ? '<span style="background:rgba(255,255,255,.25);border-radius:99px;padding:2px 10px;font-size:12px;font-weight:600">มีการเปลี่ยนแปลง</span>' : ''}
+        </button>
+      </div>`;
 
     // Rank change handler
     document.querySelectorAll('.rank-sel').forEach(sel => {
@@ -2367,7 +2401,7 @@ async function renderJudgeStation(app, stationId){
     // Save button
     document.getElementById('judgeSaveBtn')?.addEventListener('click', async ()=>{
       const btn = document.getElementById('judgeSaveBtn');
-      btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+      btn.disabled = true; btn.innerHTML = '<span class="loader"></span> กำลังบันทึก...';
       try{
         await saveJudging(ev.id, stationId, rankings);
         _judgeState.unsaved = false;
@@ -2381,6 +2415,7 @@ async function renderJudgeStation(app, stationId){
       } catch(err){
         Swal.fire({icon:'error',title:'บันทึกไม่สำเร็จ',text:err.message,confirmButtonColor:'#c43d3d'});
         btn.disabled = false;
+        btn.innerHTML = '💾 บันทึกผลการตัดสิน';
       }
     });
   }
@@ -2420,13 +2455,68 @@ async function renderJudgeStation(app, stationId){
   };
 }
 
+/* Helper: extract Drive file ID and return embeddable image URL */
+function getDriveImageUrl(fileUrl){
+  if(!fileUrl) return null;
+  let id = null;
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{15,})/,   // /file/d/ID/view
+    /[?&]id=([a-zA-Z0-9_-]{15,})/,        // ?id=ID
+    /\/d\/([a-zA-Z0-9_-]{15,})\//,         // /d/ID/
+  ];
+  for(const p of patterns){ const m = fileUrl.match(p); if(m){ id=m[1]; break; } }
+  if(!id) return null;
+  // Use thumbnail endpoint — works for shared-with-link files, no CORS issue for <img>
+  return { img: `https://drive.google.com/thumbnail?id=${id}&sz=w1200-h1200`, id };
+}
+
 function showWorkModal(subId){
   const s = window._judgeSubsMap?.[subId];
   if(!s){ toast('ไม่พบข้อมูลผลงาน','error'); return; }
+
+  const isArt = s.stationName && s.stationName.includes('ศิลปะ');
+  const driveImg = isArt ? getDriveImageUrl(s.fileUrl) : null;
+
+  const fileSection = (() => {
+    if(isArt && driveImg){
+      return `
+        <div style="margin-top:10px">
+          <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px">🖼 ผลงานศิลปะ</div>
+          <div id="artImgWrap" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--cream);min-height:120px;display:flex;align-items:center;justify-content:center">
+            <img id="artImg" src="${driveImg.img}"
+              style="max-width:100%;max-height:480px;display:block;object-fit:contain"
+              alt="ผลงานศิลปะ"
+              onload="document.getElementById('artImgLoading').style.display='none'"
+              onerror="document.getElementById('artImgLoading').style.display='none';document.getElementById('artImgErr').style.display='flex';this.style.display='none'">
+            <div id="artImgLoading" style="position:absolute;padding:30px;text-align:center;color:var(--ink-soft)">
+              <div class="loader" style="border-color:var(--gold);border-top-color:transparent;margin:0 auto 8px"></div>
+              <div style="font-size:12px">กำลังโหลดภาพ...</div>
+            </div>
+          </div>
+          <div id="artImgErr" style="display:none;background:#fff5f5;border:1px dashed #fca5a5;border-radius:10px;padding:14px;margin-top:6px;flex-direction:column;align-items:center;gap:8px;font-size:13px;color:#7f1d1d;text-align:center">
+            <div>ไม่สามารถโหลดภาพได้โดยตรง (อาจต้องตั้งค่าการเข้าถึงไฟล์)</div>
+            <a href="${esc(s.fileUrl)}" target="_blank"
+               style="padding:8px 16px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;border-radius:8px;font-weight:600;font-size:13px">
+              📎 เปิดภาพบน Google Drive
+            </a>
+          </div>
+          ${s.fileUrl ? `<div style="margin-top:8px;text-align:right">
+            <a href="${esc(s.fileUrl)}" target="_blank" style="font-size:12px;color:var(--gold-dark)">↗ เปิดต้นฉบับใน Drive</a>
+          </div>` : ''}
+        </div>`;
+    }
+    if(s.fileUrl){
+      return `<div style="margin-top:12px">
+        <a href="${esc(s.fileUrl)}" target="_blank" class="btn btn-ghost" style="font-size:13px;padding:8px 14px">📎 ดูไฟล์แนบ</a>
+      </div>`;
+    }
+    return '';
+  })();
+
   const modal = document.getElementById('modal');
   modal.innerHTML = `
     <div class="modal-head">
-      <div class="modal-title">📄 ผลงาน</div>
+      <div class="modal-title">${isArt ? '🎨 ผลงานศิลปะ' : '📄 ผลงาน'}</div>
       <button class="close-btn" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
@@ -2435,10 +2525,17 @@ function showWorkModal(subId){
         <div style="color:var(--ink-soft);margin-top:2px">${esc(s.stationName||'')}</div>
       </div>
       ${s.workTitle ? `<div style="font-weight:700;font-size:15px;color:var(--gold-deep);margin-bottom:8px">${esc(s.workTitle)}</div>` : ''}
-      <div style="white-space:pre-wrap;font-size:14px;line-height:1.8;background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px;max-height:320px;overflow-y:auto">${esc(s.work||'(ไม่มีเนื้อหา)')}</div>
-      ${s.fileUrl ? `<div style="margin-top:12px"><a href="${esc(s.fileUrl)}" target="_blank" class="btn btn-ghost" style="font-size:13px;padding:8px 14px">📎 ดูไฟล์แนบ</a></div>` : ''}
+      ${isArt
+        ? `<div style="font-size:13px;color:var(--ink-soft);white-space:pre-wrap">${esc(s.work||'')}</div>`
+        : `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px;max-height:300px;overflow-y:auto">${esc(s.work||'(ไม่มีเนื้อหา)')}</div>`
+      }
+      ${fileSection}
     </div>`;
   document.getElementById('modalBg').classList.add('show');
+
+  // Fix loading indicator overlap
+  const wrap = document.getElementById('artImgWrap');
+  if(wrap) wrap.style.position = 'relative';
 }
 
 function exportJudgingExcel(ev, station, subs, rankings){
