@@ -1,0 +1,2414 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบส่งผลงานกิจกรรมค่ายฯ</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎨%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+  :root{
+    --gold:#C9A961;
+    --gold-dark:#8C7233;
+    --gold-deep:#5A4A24;
+    --gold-light:#E8D9A8;
+    --cream:#FAF7F0;
+    --cream-dark:#F0E9D6;
+    --white:#FFFFFF;
+    --ink:#2A2A2A;
+    --ink-soft:#5C5C5C;
+    --line:#E6DFCB;
+    --shadow:0 8px 30px rgba(140,114,51,.08);
+    --shadow-strong:0 18px 50px rgba(140,114,51,.18);
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{font-family:'Sarabun',sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;font-size:16px;line-height:1.5}
+  body{background:linear-gradient(180deg,var(--cream) 0%,#fff 100%) fixed}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  input,textarea,select{font-family:inherit;font-size:16px}
+  a{color:inherit;text-decoration:none}
+
+  /* Header */
+  .header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .header-inner{max-width:1200px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:12px;cursor:pointer;flex:1;min-width:0}
+  .brand-logo{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--gold) 0%,var(--gold-dark) 100%);display:grid;place-items:center;color:#fff;font-weight:800;font-size:20px;flex-shrink:0;box-shadow:var(--shadow);overflow:hidden}
+  .brand-logo img{width:100%;height:100%;object-fit:cover}
+  .brand-text{min-width:0}
+  .brand-title{font-weight:700;font-size:15px;color:var(--gold-deep);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand-sub{font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gear-btn{width:42px;height:42px;border-radius:50%;background:var(--white);border:1px solid var(--line);display:grid;place-items:center;transition:.2s;flex-shrink:0}
+  .gear-btn:hover{background:var(--gold);color:#fff;border-color:var(--gold);transform:rotate(90deg)}
+  .gear-btn svg{width:20px;height:20px}
+
+  /* Main container */
+  main{max-width:1200px;margin:0 auto;padding:24px 20px 60px}
+
+  /* Hero */
+  .hero{text-align:center;padding:30px 0 36px;position:relative}
+  .hero::before{content:'';position:absolute;left:50%;top:0;transform:translateX(-50%);width:90px;height:3px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+  .hero h1{font-size:clamp(22px,5vw,32px);font-weight:800;color:var(--gold-deep);margin-bottom:8px;letter-spacing:-0.5px}
+  .hero p{color:var(--ink-soft);font-size:14px;max-width:560px;margin:0 auto;padding:0 20px}
+  .event-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--cream-dark);border-radius:99px;margin-top:14px;font-size:12px;color:var(--gold-deep);font-weight:600}
+  .event-pill::before{content:'●';color:var(--gold)}
+
+  /* Section header */
+  .sec-head{display:flex;align-items:center;gap:12px;margin:30px 0 16px}
+  .sec-head .num{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0}
+  .sec-head h2{font-size:17px;font-weight:700;color:var(--gold-deep)}
+  .sec-head .line{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+
+  /* Card grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  .card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:22px 20px;cursor:pointer;transition:.25s;position:relative;overflow:hidden;text-align:left;width:100%}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-dark));opacity:0;transition:.25s}
+  .card:hover{transform:translateY(-3px);box-shadow:var(--shadow-strong);border-color:var(--gold-light)}
+  .card:hover::before{opacity:1}
+  .card-icon{width:48px;height:48px;border-radius:12px;background:var(--cream);display:grid;place-items:center;margin-bottom:14px;color:var(--gold-dark);transition:.25s}
+  .card:hover .card-icon{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff}
+  .card-icon svg{width:24px;height:24px}
+  .card-title{font-weight:700;font-size:16px;margin-bottom:4px;color:var(--ink)}
+  .card-desc{font-size:13px;color:var(--ink-soft)}
+  .card-arrow{position:absolute;right:18px;bottom:18px;color:var(--gold);opacity:0;transition:.25s}
+  .card:hover .card-arrow{opacity:1;transform:translateX(3px)}
+
+  /* Generic page */
+  .page{background:var(--white);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);border:1px solid var(--line)}
+  .page-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .back-btn{width:36px;height:36px;border-radius:50%;background:var(--cream);display:grid;place-items:center;color:var(--gold-dark);transition:.2s;flex-shrink:0}
+  .back-btn:hover{background:var(--gold);color:#fff}
+  .page-title{font-size:18px;font-weight:700;color:var(--gold-deep);flex:1}
+
+  /* Forms */
+  .form-row{margin-bottom:14px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--gold-deep);margin-bottom:6px}
+  label .req{color:#c43d3d;margin-left:2px}
+  .input,.textarea,select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--white);color:var(--ink);transition:.2s}
+  .input:focus,.textarea:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,97,.15)}
+  .textarea{resize:vertical;min-height:90px;font-family:inherit}
+  .file-input{display:block;padding:12px 14px;border:2px dashed var(--gold-light);border-radius:10px;background:var(--cream);text-align:center;color:var(--ink-soft);cursor:pointer;transition:.2s;font-size:13px}
+  .file-input:hover{border-color:var(--gold);background:var(--cream-dark)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 22px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;font-weight:600;border-radius:10px;transition:.2s;font-size:15px;border:none}
+  .btn:hover{transform:translateY(-1px);box-shadow:var(--shadow-strong)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn-ghost{background:var(--cream);color:var(--gold-dark)}
+  .btn-ghost:hover{background:var(--cream-dark);color:var(--gold-deep)}
+  .btn-block{display:flex;width:100%}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+  /* Station list */
+  .station-list{display:grid;gap:12px}
+  .station-item{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--cream);border-radius:12px;cursor:pointer;border:1px solid var(--line);transition:.2s;text-align:left;width:100%}
+  .station-item:hover{background:var(--white);border-color:var(--gold);transform:translateX(3px);box-shadow:var(--shadow)}
+  .station-num{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--gold-light),var(--gold));display:grid;place-items:center;color:#fff;font-weight:800;flex-shrink:0}
+  .station-name{font-weight:600;flex:1}
+  .station-arrow{color:var(--gold-dark)}
+
+  /* Modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(45,38,18,.55);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--white);border-radius:var(--radius);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-strong);animation:slideUp .3s}
+  .modal-head{padding:18px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:1}
+  .modal-title{font-weight:700;color:var(--gold-deep);font-size:16px}
+  .close-btn{width:32px;height:32px;border-radius:50%;background:var(--cream);display:grid;place-items:center;color:var(--ink-soft)}
+  .close-btn:hover{background:#fee;color:#c43d3d}
+  .modal-body{padding:20px 22px}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+  /* Settings menu */
+  .settings-menu{display:grid;gap:8px}
+  .settings-item{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--cream);border-radius:10px;cursor:pointer;border:1px solid transparent;transition:.2s;text-align:left;width:100%}
+  .settings-item:hover{background:var(--white);border-color:var(--gold-light);box-shadow:var(--shadow)}
+  .settings-icon{color:var(--gold-dark);flex-shrink:0}
+  .settings-text{flex:1}
+  .settings-title{font-weight:600;font-size:14px}
+  .settings-desc{font-size:12px;color:var(--ink-soft)}
+
+  /* Ratings */
+  .rating-question{padding:14px;background:var(--cream);border-radius:10px;margin-bottom:10px}
+  .rating-q-text{font-weight:500;margin-bottom:10px;font-size:14px}
+  .rating-options{display:flex;gap:6px;flex-wrap:wrap}
+  .rating-opt{flex:1;min-width:54px;padding:10px 6px;background:#fff;border:1px solid var(--line);border-radius:8px;text-align:center;font-weight:600;cursor:pointer;transition:.15s;font-size:13px}
+  .rating-opt:hover{border-color:var(--gold)}
+  .rating-opt.active{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;border-color:var(--gold-dark)}
+  .rating-opt-label{font-size:10px;display:block;margin-top:2px;opacity:.85}
+
+  /* Section pill (for evaluation categories) */
+  .cat-head{display:flex;align-items:center;gap:10px;margin:20px 0 12px;padding:10px 14px;background:linear-gradient(90deg,var(--cream-dark),transparent);border-left:3px solid var(--gold);border-radius:0 8px 8px 0}
+  .cat-head h3{font-size:15px;color:var(--gold-deep);font-weight:700}
+
+  /* Dashboard */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+  .stat-card{background:linear-gradient(135deg,var(--white),var(--cream));border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center}
+  .stat-num{font-size:28px;font-weight:800;color:var(--gold-dark);line-height:1}
+  .stat-label{font-size:12px;color:var(--ink-soft);margin-top:4px}
+
+  .table-wrap{overflow-x:auto;margin-top:14px;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
+  th{background:var(--cream);text-align:left;padding:10px 12px;font-weight:700;color:var(--gold-deep);border-bottom:2px solid var(--gold-light);white-space:nowrap}
+  td{padding:10px 12px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:var(--cream)}
+
+  .bar-chart{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .bar-row{display:flex;align-items:center;gap:10px}
+  .bar-label{flex:0 0 130px;font-size:12px;font-weight:500;color:var(--ink)}
+  .bar-track{flex:1;height:24px;background:var(--cream);border-radius:6px;overflow:hidden;position:relative}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--gold-light),var(--gold-dark));display:flex;align-items:center;justify-content:flex-end;padding:0 8px;font-size:11px;color:#fff;font-weight:700;transition:width .8s}
+  .bar-value{flex:0 0 auto;font-weight:700;color:var(--gold-dark);font-size:13px;min-width:40px;text-align:right}
+
+  /* Question editor */
+  .q-list{display:grid;gap:8px}
+  .q-item{display:flex;gap:10px;align-items:flex-start;padding:10px;background:var(--cream);border-radius:8px}
+  .q-item .q-num{flex:0 0 28px;height:28px;background:var(--gold);color:#fff;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700}
+  .q-item input{flex:1;border:1px solid var(--line);background:#fff;font-size:13px}
+  .q-item .del{background:transparent;color:#c43d3d;padding:6px}
+
+  /* Toast */
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--gold-deep);color:#fff;padding:12px 22px;border-radius:99px;font-size:14px;font-weight:500;z-index:200;box-shadow:var(--shadow-strong);animation:fadeIn .2s}
+  .toast.error{background:#c43d3d}
+  .toast.warn{background:#b78a1e}
+
+  /* Judging badges */
+  .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;line-height:1.6}
+  .badge-done{background:#d4edda;color:#155724}
+  .badge-progress{background:#fff3cd;color:#856404}
+  .badge-pending{background:#e2e3e5;color:#383d41}
+
+  /* Footer */
+  footer{text-align:center;padding:30px 20px;font-size:12px;color:var(--ink-soft);border-top:1px solid var(--line);margin-top:40px;background:var(--cream)}
+  footer .dev{font-weight:600;color:var(--gold-dark)}
+
+  /* Loading */
+  .loader{display:inline-block;width:18px;height:18px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-state{text-align:center;padding:40px;color:var(--ink-soft)}
+
+  /* Event selector */
+  .event-select{padding:8px 12px;background:#fff;border:1px solid var(--gold-light);border-radius:8px;font-size:13px;color:var(--gold-deep);font-weight:500;max-width:100%}
+
+  /* Toggle switch */
+  .toggle{position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0}
+  .toggle input{opacity:0;width:0;height:0}
+  .toggle .slider{position:absolute;cursor:pointer;inset:0;background:#ccc;border-radius:24px;transition:.2s}
+  .toggle .slider::before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+  .toggle input:checked + .slider{background:var(--gold)}
+  .toggle input:checked + .slider::before{transform:translateX(18px)}
+
+  /* Mobile tweaks */
+  @media (max-width:600px){
+    main{padding:18px 14px 50px}
+    .header-inner{padding:12px 14px}
+    .brand-title{font-size:13px}
+    .brand-sub{font-size:10px}
+    .grid{grid-template-columns:1fr}
+    .page{padding:18px 14px}
+    .modal-body{padding:16px 16px}
+    .rating-opt{min-width:44px;padding:8px 4px;font-size:12px}
+    .stat-grid{grid-template-columns:repeat(2,1fr)}
+    .bar-label{flex:0 0 90px}
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="brand" onclick="navigate('home')">
+      <div class="brand-logo" id="brandLogo">ค</div>
+      <div class="brand-text">
+        <div class="brand-title" id="brandTitle">กลุ่มสร้างสรรค์สุนทรีย์</div>
+        <div class="brand-sub" id="brandSub">ระบบส่งผลงานกิจกรรมค่ายฯ</div>
+      </div>
+    </div>
+    <button class="gear-btn" onclick="openSettings()" title="ตั้งค่า">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<footer>
+  พัฒนาโดย <span class="dev">ครูนนทพัทธ์ หิรัญเรือง</span> · กลุ่มสร้างสรรค์สุนทรีย์
+</footer>
+
+<div class="modal-bg" id="modalBg" onclick="if(event.target.id==='modalBg')closeModal()">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div id="toastHost"></div>
+
+<script>
+/* ============================================================
+   FIREBASE
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyCyFDbV6xsPIFOLS0hvPskkMwjwHtO0Kyg",
+  authDomain: "dontreesillapavannakam.firebaseapp.com",
+  projectId: "dontreesillapavannakam",
+  storageBucket: "dontreesillapavannakam.firebasestorage.app",
+  messagingSenderId: "936782578627",
+  appId: "1:936782578627:web:404086ac16709977ed3376"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ============================================================
+   DEFAULTS & CONSTANTS
+   ============================================================ */
+const ADMIN_PASSWORD = 'admin123';
+
+const DEFAULT_EVENT = {
+  name: 'กิจกรรมค่ายวิชาการดนตรี วรรณกรรม ศิลปะ และภาพยนตร์สั้น ปีการศึกษา 2569 ค่าย 1',
+  date: '9-10 พฤษภาคม 2569',
+  location: 'โรงเรียนหนองถ่มวิทยา',
+  speaker: 'นายธำรง ทาทอง และคณะ',
+  stations: [
+    {id:'st1', name:'ฐานบทกวี', allowFile:true},
+    {id:'st2', name:'ฐานการเขียนวรรณกรรม', allowFile:true},
+    {id:'st3', name:'ฐานศิลปะ', allowFile:true},
+    {id:'st4', name:'ฐานสารคดี', allowFile:true},
+  ]
+};
+
+const DEFAULT_EVAL_STATIONS = [
+  {id:'es1', name:'ฐานบทกวี'},
+  {id:'es2', name:'ฐานการเขียนวรรณกรรม'},
+  {id:'es3', name:'ฐานศิลปะ'},
+  {id:'es4', name:'ฐานสารคดี'},
+  {id:'es5', name:'ฐานหนังสั้น'},
+  {id:'es6', name:'ฐานดนตรี'},
+];
+
+const DEFAULT_QUESTIONS = {
+  cat1: {
+    title:'ด้านวิทยากร',
+    items:[
+      'วิทยากรมีความรู้ความเข้าใจในเนื้อหาที่ถ่ายทอด',
+      'วิทยากรอธิบายเนื้อหาได้ชัดเจน เข้าใจง่าย',
+      'วิทยากรเปิดโอกาสให้ผู้เข้าร่วมซักถาม/แสดงความคิดเห็น',
+      'วิทยากรมีบุคลิกภาพและการสื่อสารเหมาะสม',
+      'วิทยากรกระตุ้นการเรียนรู้และสร้างบรรยากาศที่ดี',
+    ]
+  },
+  cat2: {
+    title:'ด้านเนื้อหา/กิจกรรม',
+    items:[
+      'เนื้อหาสาระมีความเหมาะสมและน่าสนใจ',
+      'กิจกรรมส่งเสริมความคิดสร้างสรรค์ของผู้เข้าร่วม',
+      'เนื้อหาสามารถนำไปประยุกต์ใช้ได้จริง',
+      'รูปแบบกิจกรรมหลากหลายและเหมาะสม',
+      'ระยะเวลาในการจัดกิจกรรมเหมาะสม',
+    ]
+  },
+  cat3: {
+    title:'ด้านการจัดกิจกรรมและการบริการ',
+    items:[
+      'สถานที่จัดกิจกรรมมีความเหมาะสม',
+      'อุปกรณ์/สื่อประกอบมีความพร้อม',
+      'การประสานงานและการอำนวยความสะดวกเป็นไปด้วยดี',
+      'เอกสาร/อาหาร/เครื่องดื่มมีความเหมาะสม',
+      'ความพึงพอใจในภาพรวมของกิจกรรม',
+    ]
+  }
+};
+
+const DEFAULT_OPEN_QS = [
+  'สิ่งที่ท่านได้รับจากการเข้าร่วมกิจกรรม',
+  'ข้อเสนอแนะเพื่อพัฒนากิจกรรมในครั้งต่อไป'
+];
+
+const RATING_LABELS = ['น้อยที่สุด','น้อย','ปานกลาง','มาก','มากที่สุด'];
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  events: [],
+  currentEventId: null,
+  settings: {
+    logoUrl:'',
+    evalStations: DEFAULT_EVAL_STATIONS,
+    questions: DEFAULT_QUESTIONS,
+    openQuestions: DEFAULT_OPEN_QS,
+    appsScriptUrl:'',
+    lineGroupUrl:'',
+  },
+  isAdmin: false,
+};
+
+const getCurrentEvent = () => state.events.find(e=>e.id===state.currentEventId);
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const el = (tag, attrs={}, ...children) => {
+  const e = document.createElement(tag);
+  for(const k in attrs){
+    if(k==='class') e.className = attrs[k];
+    else if(k.startsWith('on')) e[k.toLowerCase()] = attrs[k];
+    else if(k==='html') e.innerHTML = attrs[k];
+    else e.setAttribute(k, attrs[k]);
+  }
+  for(const c of children){
+    if(c==null) continue;
+    if(typeof c==='string'||typeof c==='number') e.appendChild(document.createTextNode(c));
+    else e.appendChild(c);
+  }
+  return e;
+};
+const esc = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg, type='ok'){
+  const t = el('div', {class:'toast '+(type==='error'?'error':type==='warn'?'warn':'')}, msg);
+  document.getElementById('toastHost').appendChild(t);
+  setTimeout(()=>t.remove(), 3200);
+}
+
+function showLoader(container, text='กำลังโหลด...'){
+  container.innerHTML = `<div class="loading-state"><div class="loader" style="border-color:var(--gold);border-top-color:transparent"></div><div style="margin-top:10px">${text}</div></div>`;
+}
+
+/* ============================================================
+   ROUTING
+   ============================================================ */
+function navigate(view, ...params){
+  let hash = '#'+view;
+  if(params.length){
+    hash += '/' + params.join('/');
+  }
+  window.location.hash = hash;
+}
+
+function parseRoute(){
+  const hash = window.location.hash.slice(1) || 'home';
+  const parts = hash.split('/');
+  return { view: parts[0], params: parts.slice(1) };
+}
+
+window.addEventListener('hashchange', ()=>{
+  // Clear beforeunload if navigating away from judging page
+  const route = parseRoute();
+  if(route.view !== 'judge-station') window.onbeforeunload = null;
+  render();
+});
+
+/* ============================================================
+   FIRESTORE OPERATIONS
+   ============================================================ */
+async function loadAllData(){
+  // Load events
+  const evSnap = await db.collection('events').orderBy('createdAt','desc').get();
+  state.events = evSnap.docs.map(d=>({id:d.id, ...d.data()}));
+
+  // Normalize stations: ensure every station has a stable id (heal legacy data)
+  for(const ev of state.events){
+    if(!Array.isArray(ev.stations)) ev.stations = [];
+    let needsUpdate = false;
+    ev.stations = ev.stations.map((s, idx)=>{
+      if(!s || typeof s !== 'object') return null;
+      const out = {
+        id: s.id || ('st'+(idx+1)+'_'+Math.random().toString(36).slice(2,7)),
+        name: s.name || '',
+        allowFile: s.allowFile !== false,
+      };
+      if(!s.id) needsUpdate = true;
+      return out;
+    }).filter(Boolean);
+    if(needsUpdate){
+      try{ await db.collection('events').doc(ev.id).update({stations: ev.stations}); }
+      catch(e){ console.warn('Failed to migrate station ids for event', ev.id, e); }
+    }
+  }
+
+  // Load settings
+  const settingsDoc = await db.collection('settings').doc('global').get();
+  if(settingsDoc.exists){
+    const s = settingsDoc.data();
+    state.settings = {
+      logoUrl: s.logoUrl || '',
+      evalStations: s.evalStations || DEFAULT_EVAL_STATIONS,
+      questions: s.questions || DEFAULT_QUESTIONS,
+      openQuestions: s.openQuestions || DEFAULT_OPEN_QS,
+      appsScriptUrl: s.appsScriptUrl || '',
+      lineGroupUrl: s.lineGroupUrl || '',
+    };
+    state.currentEventId = s.currentEventId || (state.events[0]?.id || null);
+  } else {
+    state.currentEventId = state.events[0]?.id || null;
+  }
+
+  // Initialize default event if none exist
+  if(state.events.length === 0){
+    const newEv = await createEvent({...DEFAULT_EVENT, stations: DEFAULT_EVENT.stations.map(s=>({...s}))});
+    state.currentEventId = newEv.id;
+    await saveSettings();
+  }
+
+  applyBranding();
+}
+
+async function saveSettings(){
+  await db.collection('settings').doc('global').set({
+    logoUrl: state.settings.logoUrl,
+    evalStations: state.settings.evalStations,
+    questions: state.settings.questions,
+    openQuestions: state.settings.openQuestions,
+    appsScriptUrl: state.settings.appsScriptUrl,
+    lineGroupUrl: state.settings.lineGroupUrl,
+    currentEventId: state.currentEventId,
+  }, {merge:true});
+}
+
+async function createEvent(data){
+  const docRef = await db.collection('events').add({
+    name: data.name,
+    date: data.date,
+    location: data.location,
+    speaker: data.speaker || '',
+    stations: data.stations,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  const ev = {id: docRef.id, ...data, createdAt: new Date()};
+  state.events.unshift(ev);
+  return ev;
+}
+
+async function updateEvent(id, data){
+  await db.collection('events').doc(id).update(data);
+  const i = state.events.findIndex(e=>e.id===id);
+  if(i>=0) state.events[i] = {...state.events[i], ...data};
+}
+
+async function deleteEvent(id){
+  await db.collection('events').doc(id).delete();
+  state.events = state.events.filter(e=>e.id!==id);
+  if(state.currentEventId === id){
+    state.currentEventId = state.events[0]?.id || null;
+    await saveSettings();
+  }
+}
+
+async function getSubmissions(eventId){
+  const snap = await db.collection('submissions').where('eventId','==',eventId).get();
+  return snap.docs.map(d=>({id:d.id, ...d.data()}));
+}
+
+async function getEvaluations(eventId){
+  const snap = await db.collection('evaluations').where('eventId','==',eventId).get();
+  return snap.docs.map(d=>({id:d.id, ...d.data()}));
+}
+
+async function getAllEvaluations(){
+  const snap = await db.collection('evaluations').get();
+  return snap.docs.map(d=>({id:d.id, ...d.data()}));
+}
+
+/* ============================================================
+   FILE UPLOAD via Apps Script
+   ============================================================ */
+async function uploadFile(file, metadata){
+  if(!state.settings.appsScriptUrl){
+    throw new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL ในเมนูตั้งค่า');
+  }
+  const base64 = await new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  const resp = await fetch(state.settings.appsScriptUrl, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({
+      action:'upload',
+      fileName: file.name,
+      mimeType: file.type,
+      base64Data: base64,
+      metadata,
+    })
+  });
+  const result = await resp.json();
+  if(!result.success) throw new Error(result.error || 'อัปโหลดไม่สำเร็จ');
+  return result;
+}
+
+/* ============================================================
+   BRANDING
+   ============================================================ */
+function applyBranding(){
+  const ev = getCurrentEvent();
+  document.getElementById('brandTitle').textContent = ev?.name ? (ev.name.length > 55 ? ev.name.slice(0,55)+'…' : ev.name) : 'ระบบส่งผลงานกิจกรรมค่ายฯ';
+  document.getElementById('brandSub').textContent = ev?.date && ev?.location ? `${ev.date} · ${ev.location}` : 'ระบบส่งผลงานกิจกรรมค่ายฯ';
+  if(state.settings.logoUrl){
+    const lg = document.getElementById('brandLogo');
+    lg.innerHTML = `<img src="${esc(state.settings.logoUrl)}" alt="logo" onerror="this.parentNode.innerHTML='ค'">`;
+    document.getElementById('favicon').href = state.settings.logoUrl;
+  }
+  document.title = ev?.name || 'ระบบส่งผลงานกิจกรรมค่ายฯ';
+}
+
+/* ============================================================
+   RENDER — MAIN ROUTER
+   ============================================================ */
+function render(){
+  const route = parseRoute();
+  const app = document.getElementById('app');
+
+  if(state.events.length === 0){
+    app.innerHTML = `<div class="page"><div class="loading-state">กำลังเตรียมระบบ...</div></div>`;
+    return;
+  }
+
+  switch(route.view){
+    case 'home': renderHome(app); break;
+    case 'submit': renderSubmitList(app); break;
+    case 'submit-form': renderSubmitForm(app, route.params[0]); break;
+    case 'evaluate': renderEvaluate(app); break;
+    case 'report-submissions': renderReportSubmissions(app); break;
+    case 'report-evaluations': renderReportEvaluations(app); break;
+    case 'judge': renderJudgeList(app); break;
+    case 'judge-station': renderJudgeStation(app, route.params[0]); break;
+    default: renderHome(app);
+  }
+  applyBranding();
+}
+
+/* ============================================================
+   VIEWS
+   ============================================================ */
+function renderHome(app){
+  const ev = getCurrentEvent();
+  app.innerHTML = `
+    <div class="hero">
+      <h1>${ev ? esc(ev.name) : 'ระบบส่งผลงานกิจกรรมค่ายฯ'}</h1>
+      <p>กลุ่มสร้างสรรค์สุนทรีย์ — ส่งผลงาน ประเมินความพึงพอใจ และดูรายงานสรุป</p>
+      ${ev ? `<div class="event-pill">${esc(ev.date)} · ${esc(ev.location)}</div>` : ''}
+    </div>
+
+    <div class="sec-head">
+      <span class="num">1</span>
+      <h2>สำหรับนักเรียน</h2>
+      <span class="line"></span>
+    </div>
+    <div class="grid">
+      <button class="card" onclick="navigate('submit')">
+        <div class="card-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6m-6 4h6"/></svg></div>
+        <div class="card-title">ส่งผลงาน</div>
+        <div class="card-desc">อัปโหลดผลงานตามฐานที่เข้าร่วม</div>
+        <span class="card-arrow">→</span>
+      </button>
+      <button class="card" onclick="navigate('evaluate')">
+        <div class="card-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg></div>
+        <div class="card-title">ประเมินความพึงพอใจ</div>
+        <div class="card-desc">แบบประเมินออนไลน์</div>
+        <span class="card-arrow">→</span>
+      </button>
+    </div>
+
+    <div class="sec-head">
+      <span class="num">2</span>
+      <h2>สำหรับผู้จัด / วิทยากร</h2>
+      <span class="line"></span>
+    </div>
+    <div class="grid">
+      <button class="card" onclick="navigate('report-submissions')">
+        <div class="card-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <div class="card-title">รายงานสรุปการส่งผลงาน</div>
+        <div class="card-desc">Dashboard สรุปข้อมูลการส่งผลงาน</div>
+        <span class="card-arrow">→</span>
+      </button>
+      <button class="card" onclick="navigate('report-evaluations')">
+        <div class="card-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+        <div class="card-title">รายงานผลการประเมิน</div>
+        <div class="card-desc">วิเคราะห์ผลความพึงพอใจ</div>
+        <span class="card-arrow">→</span>
+      </button>
+      <button class="card" onclick="navigate('judge')">
+        <div class="card-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg></div>
+        <div class="card-title">ตัดสินผลงานในฐาน</div>
+        <div class="card-desc">จัดลำดับผลงานแต่ละฐาน</div>
+        <span class="card-arrow">→</span>
+      </button>
+    </div>
+  `;
+}
+
+function renderSubmitList(app){
+  const ev = getCurrentEvent();
+  if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">เลือกฐานเพื่อส่งผลงาน</div>
+      </div>
+      <div style="margin-bottom:14px;font-size:13px;color:var(--ink-soft)">${esc(ev.name)}</div>
+      <div class="station-list">
+        ${ev.stations.map((s,i)=>`
+          <button class="station-item" onclick="navigate('submit-form','${s.id}')">
+            <div class="station-num">${i+1}</div>
+            <div class="station-name">${esc(s.name)}</div>
+            <div class="station-arrow"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderSubmitForm(app, stationKey){
+  const ev = getCurrentEvent();
+  if(!ev){
+    app.innerHTML = `<div class="page"><div class="page-head"><button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button><div class="page-title">ไม่พบรายการกิจกรรม</div></div></div>`;
+    return;
+  }
+  if(!ev.stations || ev.stations.length===0){
+    app.innerHTML = `<div class="page"><div class="page-head"><button class="back-btn" onclick="navigate('submit')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button><div class="page-title">ยังไม่มีฐานในรายการนี้</div></div><p style="color:var(--ink-soft);text-align:center;padding:20px">กรุณาเพิ่มฐานในเมนูตั้งค่า → จัดการรายการกิจกรรม</p></div>`;
+    return;
+  }
+  // robust lookup: id → index → name
+  let station = ev.stations.find(s=>s && s.id===stationKey);
+  if(!station){
+    const idx = parseInt(stationKey,10);
+    if(!isNaN(idx) && idx>=0 && idx<ev.stations.length) station = ev.stations[idx];
+  }
+  if(!station){
+    station = ev.stations.find(s=>s && s.name===stationKey);
+  }
+  if(!station){
+    console.warn('Station not found. key=', stationKey, 'available=', ev.stations);
+    app.innerHTML = `<div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('submit')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">ไม่พบฐานที่ระบุ</div>
+      </div>
+      <div style="padding:20px;background:var(--cream);border-radius:10px;color:var(--ink-soft);font-size:13px">
+        <p>คีย์ที่ค้นหา: <code style="background:#fff;padding:2px 6px;border-radius:4px">${esc(stationKey||'(ว่าง)')}</code></p>
+        <p style="margin-top:8px">ฐานที่มีในระบบ:</p>
+        <ul style="margin:6px 0 0 20px">${ev.stations.map(s=>`<li>${esc(s.name||'-')} <span style="opacity:.5">(id: ${esc(s.id||'ไม่มี')})</span></li>`).join('')}</ul>
+        <p style="margin-top:12px">กรุณากลับไปเลือกฐานใหม่</p>
+      </div>
+    </div>`;
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('submit')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">ส่งผลงาน · ${esc(station.name)}</div>
+        <div id="autosaveTag" style="font-size:11px;color:var(--gold-dark);flex-shrink:0;display:none">💾 บันทึกแล้ว</div>
+      </div>
+      <div id="draftNotice" style="display:none;background:#FFF8E7;border:1px solid var(--gold-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--gold-deep);display:flex;align-items:center;gap:8px">
+        <span>📋</span><span>พบข้อมูลที่พิมพ์ค้างไว้ — กรุณาตรวจสอบและส่งผลงานได้เลย</span>
+        <button onclick="clearDraft('${station.id}')" style="margin-left:auto;font-size:11px;color:#c43d3d;background:transparent;padding:2px 6px;border:1px solid #c43d3d;border-radius:4px;cursor:pointer">ล้าง</button>
+      </div>
+      <form id="submitForm">
+        <div class="form-row">
+          <label>คำนำหน้า <span class="req">*</span></label>
+          <select class="input" name="title" required>
+            <option value="">-- เลือก --</option>
+            <option>เด็กชาย</option><option>เด็กหญิง</option>
+            <option>นาย</option><option>นางสาว</option>
+            <option>นาง</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>ชื่อ <span class="req">*</span></label>
+          <input class="input" name="firstName" required>
+        </div>
+        <div class="form-row">
+          <label>นามสกุล <span class="req">*</span></label>
+          <input class="input" name="lastName" required>
+        </div>
+        <div class="form-row">
+          <label>โรงเรียน <span class="req">*</span><span style="font-weight:400;color:var(--ink-soft);font-size:11px;"> (ไม่ต้องใส่คำว่า "โรงเรียน")</span></label>
+          <input class="input" name="school" required placeholder="เช่น หนองถ่มวิทยา">
+        </div>
+        <div class="form-row">
+          ${station.name.includes('ศิลปะ')
+            ? `<label>ชื่อผลงาน <span class="req">*</span></label>
+               <textarea class="textarea" name="workTitle" required placeholder="ชื่อผลงานศิลปะที่นักเรียนอัปโหลด"></textarea>`
+            : `<label>ชื่อผลงาน <span class="req">*</span></label>
+               <input class="input" name="workTitle" required placeholder="ชื่อผลงานของท่าน">
+               <div style="margin-top:10px"></div>
+               <label>เนื้อหาผลงาน <span class="req">*</span></label>
+               <textarea class="textarea" name="work" required placeholder="พิมพ์ผลงานที่ทำเสร็จและตรวจผ่านแล้ว"></textarea>`
+          }
+        </div>
+        ${station.allowFile !== false ? `
+        <div class="form-row">
+          <label>อัปโหลดไฟล์ผลงาน <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(.pdf .docx .png .jpg)</span></label>
+          <label class="file-input">
+            <input type="file" name="file" accept=".pdf,.docx,.png,.jpg,.jpeg" style="display:none" onchange="this.parentNode.querySelector('.fname').textContent=this.files[0]?.name||'แตะเพื่อเลือกไฟล์'">
+            <span class="fname">แตะเพื่อเลือกไฟล์</span>
+          </label>
+        </div>` : ''}
+        <button type="submit" class="btn btn-block" id="submitBtn">ส่งผลงาน</button>
+      </form>
+    </div>
+  `;
+
+  // ── Autosave logic ──────────────────────────────────────────
+  const draftKey = `draft_submit_${ev.id}_${station.id}`;
+  const DRAFT_FIELDS = ['title','firstName','lastName','school','workTitle','work'];
+
+  // Restore draft if exists
+  const savedDraft = (() => { try{ return JSON.parse(localStorage.getItem(draftKey)||'null'); } catch(e){ return null; } })();
+  if(savedDraft && Object.values(savedDraft).some(v=>v)){
+    const form = document.getElementById('submitForm');
+    DRAFT_FIELDS.forEach(name => {
+      const el = form.elements[name];
+      if(el && savedDraft[name]) el.value = savedDraft[name];
+    });
+    const notice = document.getElementById('draftNotice');
+    if(notice) notice.style.display = 'flex';
+  }
+
+  // Auto-save on input
+  let saveTimer;
+  const tag = document.getElementById('autosaveTag');
+  document.getElementById('submitForm').addEventListener('input', ()=>{
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>{
+      const form = document.getElementById('submitForm');
+      if(!form) return;
+      const draft = {};
+      DRAFT_FIELDS.forEach(name => { draft[name] = form.elements[name]?.value || ''; });
+      try{ localStorage.setItem(draftKey, JSON.stringify(draft)); } catch(e){}
+      if(tag){ tag.style.display='block'; setTimeout(()=>{ if(tag) tag.style.display='none'; }, 1800); }
+    }, 800);
+  });
+
+  document.getElementById('submitForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loader"></span> กำลังส่ง...';
+    try{
+      const fd = new FormData(e.target);
+      const isArt = station.name.includes('ศิลปะ');
+      const data = {
+        eventId: ev.id,
+        eventName: ev.name,
+        stationId: station.id,
+        stationName: station.name,
+        title: fd.get('title'),
+        firstName: fd.get('firstName').trim(),
+        lastName: fd.get('lastName').trim(),
+        school: fd.get('school').trim(),
+        workTitle: isArt ? (fd.get('workTitle')||'').trim() : (fd.get('workTitle')||'').trim(),
+        work: isArt ? (fd.get('workTitle')||'').trim() : (fd.get('work')||'').trim(),
+        fileUrl: '',
+        fileName: '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      const file = fd.get('file');
+      if(file && file.size > 0){
+        const result = await uploadFile(file, {
+          eventName: ev.name,
+          station: station.name,
+          title: data.title,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          school: data.school,
+          workTitle: data.workTitle,
+          work: data.work,
+        });
+        data.fileUrl = result.fileUrl;
+        data.fileName = file.name;
+      }
+      await db.collection('submissions').add(data);
+      try{ localStorage.removeItem(draftKey); } catch(e){}
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'ส่งผลงานเรียบร้อยแล้ว!',
+        html: `<div style="font-family:'Sarabun',sans-serif;font-size:15px;line-height:1.7;color:#2A2A2A">
+          <b>${esc(data.title)} ${esc(data.firstName)} ${esc(data.lastName)}</b><br>
+          📌 ฐาน: ${esc(station.name)}<br>
+          🏫 โรงเรียน: ${esc(data.school)}<br>
+          📝 ชื่อผลงาน: ${esc(data.workTitle||data.work||'-')}
+        </div>`,
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#C9A961',
+        timer: 6000,
+        timerProgressBar: true,
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+      });
+
+      e.target.reset();
+      navigate('home');
+    } catch(err){
+      console.error(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'เกิดข้อผิดพลาด',
+        text: err.message,
+        confirmButtonText: 'ลองใหม่',
+        confirmButtonColor: '#c43d3d',
+      });
+      btn.disabled = false;
+      btn.innerHTML = 'ส่งผลงาน';
+    }
+  });
+}
+
+function renderEvaluate(app){
+  const ev = getCurrentEvent();
+  if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
+  const cats = state.settings.questions;
+  const evalStations = state.settings.evalStations;
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">แบบประเมินความพึงพอใจ</div>
+      </div>
+      <div style="margin-bottom:18px;font-size:13px;color:var(--ink-soft)">${esc(ev.name)}</div>
+      <form id="evalForm">
+        <div class="cat-head"><h3>ตอนที่ 1 · ข้อมูลผู้ตอบแบบสอบถาม</h3></div>
+        <div class="form-row">
+          <label>เพศ <span class="req">*</span></label>
+          <select class="input" name="gender" required>
+            <option value="">-- เลือก --</option>
+            <option>ชาย</option><option>หญิง</option><option>ไม่ระบุ</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>ระดับชั้น <span class="req">*</span></label>
+          <select class="input" name="grade" required>
+            <option value="">-- เลือก --</option>
+            <option>ประถมศึกษา</option>
+            <option>ม.1</option><option>ม.2</option><option>ม.3</option>
+            <option>ม.4</option><option>ม.5</option><option>ม.6</option>
+            <option>อุดมศึกษา</option><option>อื่นๆ</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>โรงเรียน <span class="req">*</span></label>
+          <input class="input" name="school" required>
+        </div>
+        <div class="form-row">
+          <label>ฐานที่เข้าร่วม <span class="req">*</span></label>
+          <select class="input" name="stationId" required>
+            <option value="">-- เลือก --</option>
+            ${evalStations.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="cat-head"><h3>ตอนที่ 2 · ความพึงพอใจรายด้าน</h3></div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px">เกณฑ์: 5=มากที่สุด, 4=มาก, 3=ปานกลาง, 2=น้อย, 1=น้อยที่สุด</div>
+
+        ${['cat1','cat2','cat3'].map(catKey=>`
+          <div class="cat-head"><h3>${esc(cats[catKey].title)}</h3></div>
+          ${cats[catKey].items.map((q,idx)=>`
+            <div class="rating-question">
+              <div class="rating-q-text">${idx+1}. ${esc(q)}</div>
+              <div class="rating-options" data-q="${catKey}_q${idx}">
+                ${[1,2,3,4,5].map(v=>`
+                  <button type="button" class="rating-opt" data-val="${v}" onclick="selectRating(this,'${catKey}_q${idx}',${v})">
+                    ${v}<span class="rating-opt-label">${RATING_LABELS[v-1]}</span>
+                  </button>
+                `).join('')}
+              </div>
+              <input type="hidden" name="${catKey}_q${idx}" required>
+            </div>
+          `).join('')}
+        `).join('')}
+
+        ${state.settings.openQuestions.length > 0 ? `
+        <div class="cat-head"><h3>ตอนที่ 3 · ข้อคิดเห็นเพิ่มเติม</h3></div>
+        ${state.settings.openQuestions.map((q,idx)=>`
+          <div class="form-row">
+            <label>${idx+1}. ${esc(q)}</label>
+            <textarea class="textarea" name="open_${idx}"></textarea>
+          </div>
+        `).join('')}
+        `:''}
+
+        <button type="submit" class="btn btn-block" id="evalBtn">ส่งแบบประเมิน</button>
+      </form>
+    </div>
+  `;
+
+  document.getElementById('evalForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const btn = document.getElementById('evalBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loader"></span> กำลังส่ง...';
+    try{
+      const fd = new FormData(e.target);
+      const ratings = {};
+      const openAnswers = [];
+      ['cat1','cat2','cat3'].forEach(catKey=>{
+        cats[catKey].items.forEach((_,idx)=>{
+          const v = fd.get(`${catKey}_q${idx}`);
+          ratings[`${catKey}_q${idx}`] = parseInt(v);
+        });
+      });
+      state.settings.openQuestions.forEach((q,idx)=>{
+        openAnswers.push({question:q, answer: fd.get(`open_${idx}`) || ''});
+      });
+      const stationId = fd.get('stationId');
+      const station = evalStations.find(s=>s.id===stationId);
+      await db.collection('evaluations').add({
+        eventId: ev.id,
+        eventName: ev.name,
+        stationId,
+        stationName: station?.name || '',
+        gender: fd.get('gender'),
+        grade: fd.get('grade'),
+        school: fd.get('school').trim(),
+        ratings,
+        openAnswers,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      toast('ส่งแบบประเมินเรียบร้อยแล้ว ขอบคุณครับ ✓');
+      setTimeout(()=>navigate('home'), 1300);
+    } catch(err){
+      console.error(err);
+      toast('เกิดข้อผิดพลาด: '+err.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = 'ส่งแบบประเมิน';
+    }
+  });
+}
+
+function selectRating(btn, name, val){
+  const wrap = btn.parentNode;
+  wrap.querySelectorAll('.rating-opt').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelector(`input[name="${name}"]`).value = val;
+}
+
+/* ============================================================
+   REPORTS — SUBMISSIONS
+   ============================================================ */
+async function renderReportSubmissions(app){
+  const ev = getCurrentEvent();
+  if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">รายงานสรุปการส่งผลงาน</div>
+      </div>
+      ${eventSelectorHTML()}
+      <div id="subReportContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div></div>
+    </div>
+  `;
+  await reloadSubmissionsReport();
+}
+
+async function reloadSubmissionsReport(){
+  const container = document.getElementById('subReportContent');
+  if(!container) return;
+  const ev = getCurrentEvent();
+  const subs = await getSubmissions(ev.id);
+  const byStation = {};
+  ev.stations.forEach(s=>byStation[s.id] = {name:s.name, items:[]});
+  subs.forEach(s=>{
+    if(!byStation[s.stationId]) byStation[s.stationId] = {name:s.stationName||'-', items:[]};
+    byStation[s.stationId].items.push(s);
+  });
+  const totalSchools = new Set(subs.map(s=>s.school)).size;
+  container.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num">${subs.length}</div><div class="stat-label">ผลงานทั้งหมด</div></div>
+      <div class="stat-card"><div class="stat-num">${totalSchools}</div><div class="stat-label">โรงเรียนที่ส่งเข้าประกวด</div></div>
+      <div class="stat-card"><div class="stat-num">${ev.stations.length}</div><div class="stat-label">ฐาน</div></div>
+      <div class="stat-card"><div class="stat-num">${subs.filter(s=>s.fileUrl).length}</div><div class="stat-label">มีไฟล์แนบ</div></div>
+    </div>
+    <h3 style="font-size:14px;color:var(--gold-deep);margin:16px 0 8px">จำนวนผลงานแยกตามฐาน</h3>
+    <div class="bar-chart">
+      ${Object.values(byStation).map(s=>{
+        const max = Math.max(1, ...Object.values(byStation).map(x=>x.items.length));
+        const pct = (s.items.length/max)*100;
+        return `<div class="bar-row">
+          <div class="bar-label">${esc(s.name)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%">${s.items.length>0?s.items.length:''}</div></div>
+          <div class="bar-value">${s.items.length}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <h3 style="font-size:14px;color:var(--gold-deep);margin:18px 0 6px">รายการผลงาน</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>ฐาน</th><th>ชื่อ-นามสกุล</th><th>โรงเรียน</th><th>ชื่อผลงาน</th><th>เนื้อหาผลงาน</th><th>ไฟล์</th></tr></thead>
+        <tbody>
+          ${subs.length===0 ? '<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:30px">ยังไม่มีข้อมูล</td></tr>' :
+          subs.map((s,i)=>`
+            <tr>
+              <td>${i+1}</td>
+              <td>${esc(s.stationName||'-')}</td>
+              <td>${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</td>
+              <td>${esc(s.school||'')}</td>
+              <td style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.workTitle||s.work||'')}">${esc(s.workTitle||'-')}</td>
+              <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.work||'')}">${esc(s.work||'-')}</td>
+              <td>${s.fileUrl?`<a href="${esc(s.fileUrl)}" target="_blank" style="color:var(--gold-dark);text-decoration:underline">เปิด</a>`:'-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ============================================================
+   REPORTS — EVALUATIONS
+   ============================================================ */
+async function renderReportEvaluations(app){
+  const ev = getCurrentEvent();
+  if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">รายงานผลการประเมิน</div>
+      </div>
+      ${eventSelectorHTML()}
+      <div id="evalReportContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div></div>
+    </div>
+  `;
+  await reloadEvaluationsReport();
+}
+
+async function reloadEvaluationsReport(){
+  const container = document.getElementById('evalReportContent');
+  if(!container) return;
+  const ev = getCurrentEvent();
+  const evals = await getEvaluations(ev.id);
+  const cats = state.settings.questions;
+  if(evals.length === 0){
+    container.innerHTML = `<div class="loading-state">ยังไม่มีผู้ตอบแบบประเมิน</div>`;
+    return;
+  }
+  const allAvg = [];
+  const catAverages = {};
+  ['cat1','cat2','cat3'].forEach(catKey=>{
+    const sums = cats[catKey].items.map(()=>0);
+    cats[catKey].items.forEach((_,idx)=>{
+      const vals = evals.map(e=>e.ratings?.[`${catKey}_q${idx}`]||0).filter(v=>v>0);
+      sums[idx] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+      allAvg.push(...vals);
+    });
+    catAverages[catKey] = sums;
+  });
+  const overallAvg = allAvg.length ? (allAvg.reduce((a,b)=>a+b,0)/allAvg.length) : 0;
+  const interpret = v => v>=4.51?'มากที่สุด':v>=3.51?'มาก':v>=2.51?'ปานกลาง':v>=1.51?'น้อย':'น้อยที่สุด';
+
+  // by station
+  const byStation = {};
+  state.settings.evalStations.forEach(s=>byStation[s.id] = {name:s.name, count:0});
+  evals.forEach(e=>{
+    if(!byStation[e.stationId]) byStation[e.stationId] = {name:e.stationName||'-',count:0};
+    byStation[e.stationId].count++;
+  });
+  const genderCount = {ชาย:0,หญิง:0,ไม่ระบุ:0};
+  evals.forEach(e=>{ if(genderCount[e.gender]!=null) genderCount[e.gender]++; else genderCount['ไม่ระบุ']++; });
+
+  container.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num">${evals.length}</div><div class="stat-label">ผู้ตอบทั้งหมด</div></div>
+      <div class="stat-card"><div class="stat-num">${overallAvg.toFixed(2)}</div><div class="stat-label">ค่าเฉลี่ยรวม</div></div>
+      <div class="stat-card"><div class="stat-num" style="font-size:18px">${interpret(overallAvg)}</div><div class="stat-label">ระดับความพึงพอใจ</div></div>
+      <div class="stat-card"><div class="stat-num">${new Set(evals.map(e=>e.school)).size}</div><div class="stat-label">โรงเรียน</div></div>
+    </div>
+
+    <h3 style="font-size:14px;color:var(--gold-deep);margin:18px 0 6px">จำแนกตามเพศ</h3>
+    <div class="bar-chart">
+      ${Object.entries(genderCount).map(([k,v])=>{
+        const pct = evals.length ? (v/evals.length)*100 : 0;
+        return `<div class="bar-row">
+          <div class="bar-label">${k}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%">${v?v:''}</div></div>
+          <div class="bar-value">${v}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <h3 style="font-size:14px;color:var(--gold-deep);margin:18px 0 6px">จำนวนผู้ประเมินต่อฐาน</h3>
+    <div class="bar-chart">
+      ${Object.values(byStation).map(s=>{
+        const max = Math.max(1, ...Object.values(byStation).map(x=>x.count));
+        const pct = (s.count/max)*100;
+        return `<div class="bar-row">
+          <div class="bar-label">${esc(s.name)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%">${s.count>0?s.count:''}</div></div>
+          <div class="bar-value">${s.count}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${['cat1','cat2','cat3'].map(catKey=>`
+      <div class="cat-head"><h3>${esc(cats[catKey].title)} (เฉลี่ย ${(catAverages[catKey].reduce((a,b)=>a+b,0)/catAverages[catKey].length).toFixed(2)})</h3></div>
+      <div class="bar-chart">
+        ${cats[catKey].items.map((q,idx)=>{
+          const v = catAverages[catKey][idx];
+          const pct = (v/5)*100;
+          return `<div class="bar-row">
+            <div class="bar-label">${idx+1}. ${esc(q.length>40?q.slice(0,40)+'...':q)}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%">${v.toFixed(2)}</div></div>
+            <div class="bar-value">${interpret(v)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `).join('')}
+
+    ${state.settings.openQuestions.length>0?`
+      <h3 style="font-size:14px;color:var(--gold-deep);margin:18px 0 6px">ข้อคิดเห็นเพิ่มเติม</h3>
+      ${state.settings.openQuestions.map((q,idx)=>{
+        const answers = evals.map(e=>e.openAnswers?.[idx]?.answer).filter(a=>a&&a.trim());
+        return `<div style="margin-bottom:12px;padding:12px;background:var(--cream);border-radius:8px">
+          <div style="font-weight:600;color:var(--gold-deep);margin-bottom:6px">${idx+1}. ${esc(q)}</div>
+          ${answers.length===0?'<div style="font-size:13px;color:var(--ink-soft)">— ไม่มีผู้ตอบ —</div>':
+            answers.map(a=>`<div style="font-size:13px;padding:6px 10px;background:#fff;border-radius:6px;margin-bottom:4px;border-left:3px solid var(--gold-light)">${esc(a)}</div>`).join('')}
+        </div>`;
+      }).join('')}
+    `:''}
+  `;
+}
+
+function eventSelectorHTML(){
+  if(state.events.length<=1) return '';
+  return `<div class="form-row">
+    <label>เลือกรายการกิจกรรม</label>
+    <select class="event-select" onchange="changeCurrentEvent(this.value)">
+      ${state.events.map(e=>`<option value="${esc(e.id)}" ${state.currentEventId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+    </select>
+  </div>`;
+}
+
+async function changeCurrentEvent(id){
+  state.currentEventId = id;
+  await saveSettings();
+  applyBranding();
+  render();
+}
+
+/* ============================================================
+   SETTINGS MODAL
+   ============================================================ */
+function openSettings(){
+  if(!state.isAdmin){
+    showAdminLogin();
+  } else {
+    showSettingsMenu();
+  }
+}
+
+function showAdminLogin(){
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">เข้าสู่เมนูตั้งค่า</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--ink-soft);font-size:13px;margin-bottom:14px">กรุณาใส่รหัสผ่านผู้ดูแลระบบ</p>
+      <input id="pwInput" type="password" class="input" placeholder="รหัสผ่าน" autocomplete="off">
+      <button class="btn btn-block" style="margin-top:14px" onclick="checkPassword()">เข้าสู่ระบบ</button>
+    </div>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+  setTimeout(()=>document.getElementById('pwInput')?.focus(),100);
+  document.getElementById('pwInput').addEventListener('keydown', e=>{if(e.key==='Enter') checkPassword();});
+}
+
+function checkPassword(){
+  const pw = document.getElementById('pwInput').value;
+  if(pw === ADMIN_PASSWORD){
+    state.isAdmin = true;
+    showSettingsMenu();
+  } else {
+    toast('รหัสผ่านไม่ถูกต้อง','error');
+  }
+}
+
+function showSettingsMenu(){
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">⚙ เมนูตั้งค่าระบบ</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-menu">
+        <button class="settings-item" onclick="showEventManagement()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+          <div class="settings-text"><div class="settings-title">จัดการรายการกิจกรรม</div><div class="settings-desc">สร้าง/แก้ไข/ลบ รายการค่าย</div></div>
+        </button>
+        <button class="settings-item" onclick="showLogoSettings()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <div class="settings-text"><div class="settings-title">ตั้งค่าโลโก้ระบบ</div><div class="settings-desc">URL โลโก้ใช้เป็น favicon และหัวเอกสาร</div></div>
+        </button>
+        <button class="settings-item" onclick="showExportMenu()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          <div class="settings-text"><div class="settings-title">Export Excel</div><div class="settings-desc">ส่งออกข้อมูลผลงาน / ผลประเมิน</div></div>
+        </button>
+        <button class="settings-item" onclick="showQuestionsSettings()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <div class="settings-text"><div class="settings-title">ตั้งค่าคำถามประเมิน</div><div class="settings-desc">15 ข้อประมาณค่า + อัตนัย / ฐานประเมิน</div></div>
+        </button>
+        <button class="settings-item" onclick="showQRSettings()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+          <div class="settings-text"><div class="settings-title">สร้าง QR Code</div><div class="settings-desc">เอกสาร A4 พร้อม QR ส่งผลงาน/ประเมิน</div></div>
+        </button>
+        <button class="settings-item" onclick="showAppsScriptSettings()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+          <div class="settings-text"><div class="settings-title">เชื่อมต่อ Google Drive</div><div class="settings-desc">URL ของ Apps Script Web App</div></div>
+        </button>
+        <button class="settings-item" onclick="showClearDataMenu()" style="border-color:#fee2e2">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="#c43d3d" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          <div class="settings-text"><div class="settings-title" style="color:#c43d3d">ล้างข้อมูลในระบบ</div><div class="settings-desc">ลบผลงาน / ผลประเมิน / ผลตัดสิน</div></div>
+        </button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+}
+
+function closeModal(){
+  document.getElementById('modalBg').classList.remove('show');
+}
+
+/* ----- Event Management ----- */
+function showEventManagement(){
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">จัดการรายการกิจกรรม</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <button class="btn btn-block" style="margin-bottom:14px" onclick="showCreateEventForm()">+ สร้างรายการใหม่</button>
+      <div style="display:grid;gap:10px">
+        ${state.events.map(e=>`
+          <div style="padding:12px;background:var(--cream);border-radius:10px;${state.currentEventId===e.id?'border:2px solid var(--gold)':'border:1px solid var(--line)'}">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:14px;color:var(--gold-deep);margin-bottom:2px">${esc(e.name)}</div>
+                <div style="font-size:12px;color:var(--ink-soft)">${esc(e.date||'')} · ${esc(e.location||'')}</div>
+                <div style="font-size:12px;color:var(--ink-soft);margin-top:2px">ฐาน: ${e.stations.length} ฐาน${e.speaker?(' · วิทยากร: '+esc(e.speaker)):''}</div>
+                ${state.currentEventId===e.id?'<div style="font-size:11px;color:var(--gold-dark);margin-top:4px;font-weight:600">● กำลังแสดงรายการนี้</div>':''}
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+              ${state.currentEventId!==e.id?`<button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="setCurrentEvent('${e.id}')">ใช้รายการนี้</button>`:''}
+              <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="showEditEventForm('${e.id}')">แก้ไข</button>
+              <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:#c43d3d" onclick="confirmDeleteEvent('${e.id}')">ลบ</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function showCreateEventForm(){ showEventForm(null); }
+function showEditEventForm(id){ showEventForm(id); }
+
+function showEventForm(eventId){
+  const modal = document.getElementById('modal');
+  const editing = eventId ? state.events.find(e=>e.id===eventId) : null;
+  const initial = editing || DEFAULT_EVENT;
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">${editing?'แก้ไขรายการ':'สร้างรายการใหม่'}</div>
+      <button class="close-btn" onclick="showEventManagement()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="eventForm">
+        <div class="form-row">
+          <label>ชื่อค่าย <span class="req">*</span></label>
+          <textarea class="textarea" name="name" required style="min-height:60px">${esc(initial.name||'')}</textarea>
+        </div>
+        <div class="form-row">
+          <label>วันที่จัดกิจกรรม <span class="req">*</span></label>
+          <input class="input" name="date" required value="${esc(initial.date||'')}">
+        </div>
+        <div class="form-row">
+          <label>สถานที่ <span class="req">*</span></label>
+          <input class="input" name="location" required value="${esc(initial.location||'')}">
+        </div>
+        <div class="form-row">
+          <label>วิทยากร</label>
+          <input class="input" name="speaker" value="${esc(initial.speaker||'')}" placeholder="เช่น นายธำรง ทาทอง และคณะ">
+        </div>
+        <div class="form-row">
+          <label>ฐานสำหรับส่งผลงาน</label>
+          <div id="stationsList">
+            ${initial.stations.map((s,i)=>stationRowHTML(s,i)).join('')}
+          </div>
+          <button type="button" class="btn btn-ghost" style="margin-top:8px;font-size:13px;padding:8px 14px" onclick="addStationRow()">+ เพิ่มฐาน</button>
+        </div>
+        <button type="submit" class="btn btn-block">${editing?'บันทึกการแก้ไข':'สร้างรายการ'}</button>
+      </form>
+    </div>
+  `;
+  document.getElementById('eventForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const stations = [];
+    document.querySelectorAll('#stationsList .station-edit-row').forEach(row=>{
+      const name = row.querySelector('input[name="stName"]').value.trim();
+      const allowFile = row.querySelector('input[name="stFile"]').checked;
+      const id = row.dataset.sid;
+      if(name) stations.push({id, name, allowFile});
+    });
+    if(stations.length===0){ toast('ต้องมีอย่างน้อย 1 ฐาน','error'); return; }
+    const data = {
+      name: fd.get('name').trim(),
+      date: fd.get('date').trim(),
+      location: fd.get('location').trim(),
+      speaker: fd.get('speaker').trim(),
+      stations,
+    };
+    if(editing){
+      await updateEvent(eventId, data);
+      toast('บันทึกการแก้ไขแล้ว');
+    } else {
+      const newEv = await createEvent(data);
+      state.currentEventId = newEv.id;
+      await saveSettings();
+      toast('สร้างรายการใหม่แล้ว');
+    }
+    applyBranding();
+    render();
+    showEventManagement();
+  });
+}
+
+function stationRowHTML(s, i){
+  const sid = s.id || ('st'+Date.now()+i);
+  return `<div class="station-edit-row" data-sid="${esc(sid)}" style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+    <input type="text" name="stName" class="input" value="${esc(s.name||'')}" placeholder="ชื่อฐาน" style="flex:1">
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-soft);flex-shrink:0;cursor:pointer" title="เปิด = แสดงปุ่มอัปโหลดไฟล์ / ปิด = ซ่อนปุ่มอัปโหลด">
+      <span style="white-space:nowrap">📎 อัปโหลด</span>
+      <span class="toggle" style="display:inline-block"><input type="checkbox" name="stFile" ${s.allowFile!==false?'checked':''}><span class="slider"></span></span>
+    </label>
+    <button type="button" onclick="this.parentNode.remove()" style="color:#c43d3d;padding:8px;background:transparent">✕</button>
+  </div>`;
+}
+
+function addStationRow(){
+  const list = document.getElementById('stationsList');
+  list.insertAdjacentHTML('beforeend', stationRowHTML({name:'',allowFile:true}, list.children.length));
+}
+
+async function setCurrentEvent(id){
+  state.currentEventId = id;
+  await saveSettings();
+  applyBranding();
+  render();
+  showEventManagement();
+  toast('เปลี่ยนรายการแล้ว');
+}
+
+async function confirmDeleteEvent(id){
+  const ev = state.events.find(e=>e.id===id);
+  if(!ev) return;
+  if(!confirm(`ต้องการลบรายการ "${ev.name}" ใช่หรือไม่?\n(ข้อมูลผลงาน/ประเมินที่อยู่ในรายการนี้จะยังคงอยู่)`)) return;
+  await deleteEvent(id);
+  toast('ลบรายการแล้ว');
+  applyBranding();
+  render();
+  showEventManagement();
+}
+
+/* ----- Logo Settings ----- */
+function showLogoSettings(){
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">ตั้งค่าโลโก้ระบบ</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>URL ของรูปโลโก้</label>
+        <input class="input" id="logoUrl" value="${esc(state.settings.logoUrl||'')}" placeholder="https://...">
+      </div>
+      <div style="display:flex;justify-content:center;margin:20px 0">
+        <div style="width:100px;height:100px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-dark));display:grid;place-items:center;color:#fff;font-size:36px;font-weight:800;overflow:hidden" id="logoPreview">${state.settings.logoUrl?`<img src="${esc(state.settings.logoUrl)}" style="width:100%;height:100%;object-fit:cover">`:'ค'}</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="saveLogoUrl()">บันทึก</button>
+        <button class="btn btn-ghost" onclick="state.settings.logoUrl='';saveSettings();applyBranding();showLogoSettings();toast('ลบโลโก้แล้ว')">ลบโลโก้</button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveLogoUrl(){
+  state.settings.logoUrl = document.getElementById('logoUrl').value.trim();
+  await saveSettings();
+  applyBranding();
+  toast('บันทึกโลโก้แล้ว');
+  showSettingsMenu();
+}
+
+/* ----- Apps Script URL ----- */
+function showAppsScriptSettings(){
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">เชื่อมต่อ Google Drive / Sheet</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px">ระบบใช้ Google Apps Script เป็นตัวกลางในการอัปโหลดไฟล์ไป Drive และบันทึกข้อมูลลง Sheet กรุณา deploy Apps Script (ดูคู่มือไฟล์ apps-script.gs) แล้วนำ URL มาวาง</p>
+      <div class="form-row">
+        <label>Apps Script Web App URL</label>
+        <input class="input" id="asUrl" value="${esc(state.settings.appsScriptUrl||'')}" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="saveAppsScriptUrl()">บันทึก</button>
+        <button class="btn btn-ghost" onclick="testAppsScript()">ทดสอบการเชื่อมต่อ</button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveAppsScriptUrl(){
+  state.settings.appsScriptUrl = document.getElementById('asUrl').value.trim();
+  await saveSettings();
+  toast('บันทึก URL แล้ว');
+}
+
+async function testAppsScript(){
+  const url = document.getElementById('asUrl').value.trim();
+  if(!url){ toast('กรุณากรอก URL ก่อน','error'); return; }
+  try{
+    const resp = await fetch(url+'?action=ping');
+    const r = await resp.json();
+    if(r.success) toast('เชื่อมต่อสำเร็จ ✓'); else toast('การเชื่อมต่อล้มเหลว: '+r.error,'error');
+  } catch(e){ toast('การเชื่อมต่อล้มเหลว: '+e.message,'error'); }
+}
+
+/* ----- Export Menu ----- */
+function showExportMenu(){
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">ส่งออกข้อมูล (Excel)</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-menu">
+        <button class="settings-item" onclick="exportSubmissions()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <div class="settings-text"><div class="settings-title">ข้อมูลส่งผลงาน</div><div class="settings-desc">รายการปัจจุบัน · ชีทแยกตามฐาน</div></div>
+        </button>
+        <button class="settings-item" onclick="exportEvaluations()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 8v8m-4-5v5m-4-2v2m13 4H4V4h2"/></svg>
+          <div class="settings-text"><div class="settings-title">ข้อมูลประเมินความพึงพอใจ</div><div class="settings-desc">ทุกรายการ · ชีทแยกตามรายการ + ชีทรวม</div></div>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function exportSubmissions(){
+  toast('กำลังเตรียมไฟล์...');
+  const ev = getCurrentEvent();
+  const [subs, allJudging] = await Promise.all([
+    getSubmissions(ev.id),
+    getAllJudgingForEvent(ev.id),
+  ]);
+  // Build quick rank lookup: stationId → {submissionId → rank}
+  const rankLookup = {};
+  Object.entries(allJudging).forEach(([stId, jd])=>{
+    rankLookup[stId] = jd.rankings || {};
+  });
+  const getR = (s) => rankLookup[s.stationId]?.[s.id] || '-';
+
+  const wb = XLSX.utils.book_new();
+  const all = subs.map((s,i)=>({
+    ลำดับ:i+1, ฐาน:s.stationName||'', คำนำหน้า:s.title||'',
+    ชื่อ:s.firstName||'', นามสกุล:s.lastName||'', โรงเรียน:s.school||'',
+    ชื่อผลงาน:s.workTitle||'', เนื้อหาผลงาน:s.work||'',
+    ลำดับที่ตัดสิน: getR(s),
+    ลิงก์ไฟล์:s.fileUrl||'', วันที่ส่ง: s.createdAt?.toDate?fmtDate(s.createdAt.toDate()):'',
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(all), 'ทั้งหมด');
+  ev.stations.forEach(st=>{
+    const rows = subs.filter(s=>s.stationId===st.id)
+      .sort((a,b)=>{
+        const ra = rankLookup[st.id]?.[a.id]||999;
+        const rb = rankLookup[st.id]?.[b.id]||999;
+        return ra-rb;
+      })
+      .map((s,i)=>({
+        ลำดับ:i+1, คำนำหน้า:s.title||'', ชื่อ:s.firstName||'', นามสกุล:s.lastName||'',
+        โรงเรียน:s.school||'', ชื่อผลงาน:s.workTitle||'', เนื้อหาผลงาน:s.work||'',
+        ลำดับที่ตัดสิน: getR(s),
+        ลิงก์ไฟล์:s.fileUrl||'', วันที่ส่ง: s.createdAt?.toDate?fmtDate(s.createdAt.toDate()):'',
+      }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length?rows:[{}]), sanitizeSheetName(st.name));
+  });
+  XLSX.writeFile(wb, `ผลงาน_${ev.name.slice(0,30)}_${fmtDate(new Date())}.xlsx`);
+  toast('ดาวน์โหลดเรียบร้อย ✓');
+}
+
+async function exportEvaluations(){
+  toast('กำลังเตรียมไฟล์...');
+  const all = await getAllEvaluations();
+  const cats = state.settings.questions;
+  const wb = XLSX.utils.book_new();
+
+  const rowsForList = (list)=> list.map((e,i)=>{
+    const row = {
+      ลำดับ:i+1, รายการกิจกรรม:e.eventName||'', ฐาน:e.stationName||'',
+      เพศ:e.gender||'', ระดับชั้น:e.grade||'', โรงเรียน:e.school||'',
+    };
+    ['cat1','cat2','cat3'].forEach(catKey=>{
+      cats[catKey].items.forEach((q,idx)=>{
+        row[`${cats[catKey].title.slice(0,8)}_ข้อ${idx+1}`] = e.ratings?.[`${catKey}_q${idx}`]||'';
+      });
+    });
+    (e.openAnswers||[]).forEach((oa,idx)=>{
+      row[`อัตนัย_${idx+1}`] = oa.answer||'';
+    });
+    row['วันที่ตอบ'] = e.createdAt?.toDate?fmtDate(e.createdAt.toDate()):'';
+    return row;
+  });
+
+  // Combined sheet
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsForList(all).length?rowsForList(all):[{}]), 'รวมทุกรายการ');
+  // Per-event sheets
+  const byEvent = {};
+  all.forEach(e=>{ (byEvent[e.eventId]=byEvent[e.eventId]||{name:e.eventName||e.eventId,list:[]}).list.push(e); });
+  Object.entries(byEvent).forEach(([eid, val])=>{
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsForList(val.list)), sanitizeSheetName(val.name));
+  });
+  XLSX.writeFile(wb, `ผลประเมิน_${fmtDate(new Date())}.xlsx`);
+  toast('ดาวน์โหลดเรียบร้อย ✓');
+}
+
+function sanitizeSheetName(name){
+  return (name||'sheet').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,30);
+}
+
+function fmtDate(d){
+  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+}
+
+/* ----- Questions Settings ----- */
+function showQuestionsSettings(){
+  const modal = document.getElementById('modal');
+  const cats = state.settings.questions;
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">ตั้งค่าคำถามประเมิน + ฐานประเมิน</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="cat-head"><h3>ฐานสำหรับการประเมิน (อาจไม่ตรงกับฐานส่งผลงาน)</h3></div>
+      <div id="evalStList" class="q-list">
+        ${state.settings.evalStations.map((s,i)=>evalStationRowHTML(s,i)).join('')}
+      </div>
+      <button class="btn btn-ghost" style="margin:8px 0;font-size:13px;padding:8px 14px" onclick="addEvalStation()">+ เพิ่มฐานประเมิน</button>
+
+      ${['cat1','cat2','cat3'].map(catKey=>`
+        <div class="cat-head"><h3>${esc(cats[catKey].title)}</h3></div>
+        <input class="input" data-cat-title="${catKey}" value="${esc(cats[catKey].title)}" style="margin-bottom:8px;font-weight:600">
+        <div class="q-list" id="${catKey}List">
+          ${cats[catKey].items.map((q,i)=>questionRowHTML(catKey,q,i)).join('')}
+        </div>
+      `).join('')}
+
+      <div class="cat-head"><h3>คำถามอัตนัย (สูงสุด 5 ข้อ)</h3></div>
+      <div class="q-list" id="openList">
+        ${state.settings.openQuestions.map((q,i)=>openQRowHTML(q,i)).join('')}
+      </div>
+      <button class="btn btn-ghost" style="margin:8px 0;font-size:13px;padding:8px 14px" onclick="addOpenQuestion()" id="addOpenBtn">+ เพิ่มคำถามอัตนัย</button>
+
+      <div class="btn-row" style="margin-top:20px">
+        <button class="btn" onclick="saveQuestionsSettings()">บันทึกการตั้งค่า</button>
+        <button class="btn btn-ghost" onclick="generateEvalDoc()">สร้างเอกสารประเมิน (.doc)</button>
+      </div>
+    </div>
+  `;
+}
+
+function evalStationRowHTML(s,i){
+  const sid = s.id || ('es'+Date.now()+i);
+  return `<div class="q-item" data-sid="${esc(sid)}">
+    <div class="q-num">${i+1}</div>
+    <input type="text" class="input" value="${esc(s.name)}" placeholder="ชื่อฐาน">
+    <button class="del" onclick="this.parentNode.remove()">✕</button>
+  </div>`;
+}
+
+function addEvalStation(){
+  const list = document.getElementById('evalStList');
+  list.insertAdjacentHTML('beforeend', evalStationRowHTML({id:'es'+Date.now(),name:''}, list.children.length));
+}
+
+function questionRowHTML(catKey,q,i){
+  return `<div class="q-item" data-cat="${catKey}">
+    <div class="q-num">${i+1}</div>
+    <input type="text" class="input" value="${esc(q)}">
+    <button class="del" onclick="this.parentNode.remove()">✕</button>
+  </div>`;
+}
+
+function openQRowHTML(q,i){
+  return `<div class="q-item">
+    <div class="q-num">${i+1}</div>
+    <input type="text" class="input" value="${esc(q)}">
+    <button class="del" onclick="this.parentNode.remove();updateOpenAddBtn()">✕</button>
+  </div>`;
+}
+
+function updateOpenAddBtn(){
+  const list = document.getElementById('openList');
+  document.getElementById('addOpenBtn').disabled = list.children.length>=5;
+}
+
+function addOpenQuestion(){
+  const list = document.getElementById('openList');
+  if(list.children.length>=5){ toast('สูงสุด 5 ข้อ','warn'); return; }
+  list.insertAdjacentHTML('beforeend', openQRowHTML('', list.children.length));
+  updateOpenAddBtn();
+}
+
+async function saveQuestionsSettings(){
+  // Eval stations
+  const newEvalSt = [];
+  document.querySelectorAll('#evalStList .q-item').forEach(row=>{
+    const name = row.querySelector('input').value.trim();
+    if(name) newEvalSt.push({id: row.dataset.sid, name});
+  });
+  if(newEvalSt.length===0){ toast('ต้องมีอย่างน้อย 1 ฐานประเมิน','error'); return; }
+  state.settings.evalStations = newEvalSt;
+
+  // Categories
+  ['cat1','cat2','cat3'].forEach(catKey=>{
+    const title = document.querySelector(`input[data-cat-title="${catKey}"]`).value.trim() || state.settings.questions[catKey].title;
+    const items = [];
+    document.querySelectorAll(`#${catKey}List .q-item input`).forEach(inp=>{
+      const v = inp.value.trim();
+      if(v) items.push(v);
+    });
+    if(items.length>0) state.settings.questions[catKey] = {title, items};
+  });
+
+  // Open questions
+  const opens = [];
+  document.querySelectorAll('#openList .q-item input').forEach(inp=>{
+    const v = inp.value.trim();
+    if(v) opens.push(v);
+  });
+  state.settings.openQuestions = opens;
+
+  await saveSettings();
+  toast('บันทึกการตั้งค่าแล้ว');
+  showSettingsMenu();
+}
+
+/* ----- Generate Evaluation DOC ----- */
+function generateEvalDoc(){
+  const ev = getCurrentEvent();
+  const cats = state.settings.questions;
+  const logoTag = state.settings.logoUrl ? `<img src="${state.settings.logoUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover" />` : '';
+  let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+  <head><meta charset='utf-8'><title>แบบประเมิน</title>
+  <style>body{font-family:'Sarabun','TH SarabunPSK',sans-serif;font-size:14pt;padding:0}h2{text-align:center;font-size:20pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}h3{margin-top:20px;border-bottom:1px solid #999;padding-bottom:4px;font-size:15pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}table{width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #444;padding:6px;font-size:12pt}.center{text-align:center}.head{text-align:center;margin-bottom:10px}.head p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13pt}.ans-line{border-bottom:1px dotted #555;height:24px;margin:6px 0}</style></head>
+  <body>
+  <div class='head'>${logoTag}<h2>แบบประเมินความพึงพอใจ</h2><p style='text-align:center'><b>${esc(ev?.name||'')}</b><br>วันที่ ${esc(ev?.date||'')} · ${esc(ev?.location||'')}</p></div>
+  <h3>ตอนที่ 1 ข้อมูลผู้ตอบแบบสอบถาม</h3>
+  <p>เพศ: ☐ ชาย ☐ หญิง ☐ ไม่ระบุ &nbsp;&nbsp;&nbsp; ระดับชั้น: ............................................. &nbsp;&nbsp;&nbsp; โรงเรียน: ......................................................................... &nbsp;&nbsp;&nbsp; ฐานที่เข้าร่วม: ............................................................</p>
+  <h3>ตอนที่ 2 ความพึงพอใจรายด้าน</h3>
+  <p style='font-size:11pt'>เกณฑ์: 5=มากที่สุด 4=มาก 3=ปานกลาง 2=น้อย 1=น้อยที่สุด</p>`;
+  ['cat1','cat2','cat3'].forEach(catKey=>{
+    html += `<h3>${esc(cats[catKey].title)}</h3><table><tr><th style='width:60%'>รายการประเมิน</th><th>5</th><th>4</th><th>3</th><th>2</th><th>1</th></tr>`;
+    cats[catKey].items.forEach((q,idx)=>{
+      html += `<tr><td>${idx+1}. ${esc(q)}</td><td class='center'>☐</td><td class='center'>☐</td><td class='center'>☐</td><td class='center'>☐</td><td class='center'>☐</td></tr>`;
+    });
+    html += `</table>`;
+  });
+  if(state.settings.openQuestions.length){
+    html += `<h3>ตอนที่ 3 ข้อคิดเห็นเพิ่มเติม</h3>`;
+    state.settings.openQuestions.forEach((q,i)=>{
+      html += `<p><b>${i+1}. ${esc(q)}</b></p><div class='ans-line'></div><div class='ans-line'></div><div class='ans-line'></div>`;
+    });
+  }
+  html += `</body></html>`;
+  downloadDoc(html, `แบบประเมิน_${(ev?.name||'event').slice(0,30)}.doc`);
+  toast('ดาวน์โหลดเอกสารแล้ว ✓');
+}
+
+function downloadDoc(html, filename){
+  const blob = new Blob([html], {type:'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ----- QR Code Settings ----- */
+function showQRSettings(){
+  const modal = document.getElementById('modal');
+  const ev = getCurrentEvent();
+  const baseUrl = location.origin + location.pathname;
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">สร้าง QR Code (เอกสาร A4)</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px">URL หลักของระบบ: <code style="background:var(--cream);padding:2px 6px;border-radius:4px">${esc(baseUrl)}</code></p>
+      <div class="form-row">
+        <label>ปรับ URL หลัก (หากต้องการแก้)</label>
+        <input class="input" id="qrBaseUrl" value="${esc(baseUrl)}">
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <label>ลิงก์กลุ่มไลน์ (LINE Group URL)</label>
+        <input class="input" id="lineGroupUrl" value="${esc(state.settings.lineGroupUrl||'')}" placeholder="https://line.me/R/ti/g/...">
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:4px">ใส่ลิงก์เพื่อสร้าง QR ไลน์กลุ่ม</div>
+      </div>
+      <button class="btn btn-ghost" style="margin-bottom:14px;font-size:13px;padding:8px 14px" onclick="saveLineGroupUrl()">💾 บันทึก URL ไลน์กลุ่ม</button>
+      <div class="settings-menu">
+        <button class="settings-item" onclick="generateAllQRs()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+          <div class="settings-text"><div class="settings-title">QR ส่งผลงาน + ประเมิน (ทุกฐาน)</div><div class="settings-desc">เอกสาร A4 แบ่ง 2 ส่วน · 1 ฐาน / 1 แผ่น</div></div>
+        </button>
+        <button class="settings-item" onclick="generateEvalQROnly()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+          <div class="settings-text"><div class="settings-title">QR ประเมินอย่างเดียว</div><div class="settings-desc">เอกสาร A4 รวม QR ประเมินใบเดียว</div></div>
+        </button>
+        <button class="settings-item" onclick="generateLineQROnly()">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          <div class="settings-text"><div class="settings-title">QR ไลน์กลุ่ม</div><div class="settings-desc">เอกสาร A4 QR เชิญเข้ากลุ่มไลน์</div></div>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveLineGroupUrl(){
+  state.settings.lineGroupUrl = document.getElementById('lineGroupUrl').value.trim();
+  await saveSettings();
+  toast('บันทึก URL ไลน์กลุ่มแล้ว ✓');
+}
+
+function generateLineQROnly(){
+  const ev = getCurrentEvent();
+  const lineUrl = (document.getElementById('lineGroupUrl')?.value || state.settings.lineGroupUrl || '').trim();
+  if(!lineUrl){ toast('กรุณากรอก URL ไลน์กลุ่มก่อน','error'); return; }
+  const lineQrImg = makeQR(lineUrl, 360);
+  const css = `
+    *{box-sizing:border-box}
+    body,div,h1,h2,h3,p{margin:0;padding:0;font-family:'Sarabun','TH SarabunPSK',sans-serif;color:#2A2A2A}
+    .qr-pg{width:210mm;height:297mm;padding:20mm 24mm;background:#fff;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+    .qr-pg h1{font-size:19pt;color:#00B900;margin:14px 0 6px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg h2{font-size:14.25pt;color:#5A4A24;font-weight:700;margin:0 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg .event-name{font-size:12.35pt;color:#444;margin-bottom:6px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg .info{font-size:11.4pt;color:#666;margin-bottom:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg .qr-box{border:3px solid #00B900;border-radius:16px;padding:28px 36px;background:#f0fff0}
+    .qr-pg .qr-box img{display:block;margin:0 auto}
+    .qr-pg .label{font-size:16.15pt;color:#00B900;margin:0 0 14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg .sub-label{font-size:11.4pt;color:#555;margin-top:14px}
+    .qr-pg .url{font-size:10pt;color:#888;margin-top:8px;word-break:break-all}
+    .qr-pg .footer-note{margin-top:24px;font-size:11pt;color:#888;border-top:1px dashed #ccc;padding-top:16px;width:100%}
+  `;
+  const page = `<div class='qr-pg'>
+    __LOGO__
+    <div class='event-name' style='margin-top:14px'>${esc(ev?.name||'')}</div>
+    <div class='info'>${esc(ev?.date||'')} · ${esc(ev?.location||'')}</div>
+    <h1>💬 เข้าร่วมกลุ่มไลน์</h1>
+    <h2>ติดตามข่าวสารและประสานงาน</h2>
+    <div class='qr-box'>
+      <div class='label'>สแกน QR เพื่อเข้ากลุ่ม LINE</div>
+      <img src='${lineQrImg}' width='360' height='360'/>
+      <div class='sub-label'>📱 เปิดแอป LINE → สแกน QR นี้</div>
+      <div class='url'>${esc(lineUrl)}</div>
+    </div>
+    <div class='footer-note'>กลุ่มสร้างสรรค์สุนทรีย์ · ${esc(ev?.date||'')} · ${esc(ev?.location||'')}</div>
+  </div>`;
+  generatePagedPdf([page], `QR_LINE_${(ev?.name||'event').slice(0,25)}.pdf`, css);
+}
+
+async function fetchAsDataUrl(url){
+  if(!url) return '';
+  if(url.startsWith('data:')) return url;
+  try{
+    const resp = await fetch(url, {mode:'cors'});
+    if(!resp.ok) return '';
+    const blob = await resp.blob();
+    return await new Promise((res,rej)=>{
+      const fr = new FileReader();
+      fr.onload = ()=>res(fr.result);
+      fr.onerror = rej;
+      fr.readAsDataURL(blob);
+    });
+  } catch(e){ return ''; }
+}
+
+async function generatePagedPdf(pageHtmls, filename, sharedStyle){
+  if(!window.jspdf || !window.html2canvas){
+    toast('PDF library ยังโหลดไม่เสร็จ ลองใหม่อีกครั้ง','error'); return;
+  }
+  toast('กำลังสร้าง PDF... ('+pageHtmls.length+' หน้า)');
+
+  let logoTag = '';
+  if(state.settings.logoUrl){
+    const dataUrl = await fetchAsDataUrl(state.settings.logoUrl);
+    if(dataUrl) logoTag = `<img src="${dataUrl}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;margin:0 auto"/>`;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait', compress:true });
+
+  for(let i=0; i<pageHtmls.length; i++){
+    const html = pageHtmls[i].replace(/__LOGO__/g, logoTag);
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;left:-99999px;top:0;width:210mm;height:297mm;background:#fff;overflow:hidden';
+    wrap.innerHTML = `<style>${sharedStyle}</style>${html}`;
+    document.body.appendChild(wrap);
+    try{
+      const imgs = wrap.querySelectorAll('img');
+      await Promise.all(Array.from(imgs).map(img =>
+        (img.complete && img.naturalHeight) ? Promise.resolve() : new Promise(r=>{
+          img.onload = r; img.onerror = r; setTimeout(r, 2500);
+        })
+      ));
+      if(document.fonts && document.fonts.ready) await document.fonts.ready;
+      const canvas = await window.html2canvas(wrap, {
+        scale:2, useCORS:true, allowTaint:true, logging:false, backgroundColor:'#ffffff'
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.93);
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+    } catch(e){
+      console.error('PDF page error', e);
+      toast('สร้างหน้า '+(i+1)+' ไม่สำเร็จ: '+e.message,'error');
+    } finally {
+      document.body.removeChild(wrap);
+    }
+  }
+
+  pdf.save(filename);
+  toast('ดาวน์โหลด PDF เรียบร้อย ✓');
+}
+
+function makeQR(text, size=260){
+  const canvas = document.createElement('canvas');
+  new QRious({element:canvas, value:text, size, level:'H', background:'#ffffff', foreground:'#5A4A24'});
+  return canvas.toDataURL('image/png');
+}
+
+function generateAllQRs(){
+  const ev = getCurrentEvent();
+  if(!ev){ toast('ยังไม่มีรายการกิจกรรม','error'); return; }
+  const baseUrl = (document.getElementById('qrBaseUrl')?.value || '').trim() || (location.origin + location.pathname);
+  const evalUrl = `${baseUrl}#evaluate`;
+  const evalQrImg = makeQR(evalUrl);
+
+  const css = `
+    *{box-sizing:border-box}
+    body,div,h1,h2,h3,p{margin:0;padding:0;font-family:'Sarabun','TH SarabunPSK',sans-serif;color:#2A2A2A}
+    .qr-pg{width:210mm;height:297mm;padding:16mm;display:flex;flex-direction:column;background:#fff}
+    .qr-hd{text-align:center;border-bottom:3px solid #C9A961;padding-bottom:10px;margin-bottom:10px}
+    .qr-hd h1{font-size:13pt;color:#5A4A24;margin:6px 0;font-weight:700;line-height:1.35;word-break:break-word}
+    .qr-hd h2{font-size:15pt;color:#8C7233;margin:4px 0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-hd p{font-size:11pt;margin:2px 0;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-sec{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed #C9A961;border-radius:14px;padding:10px 16px;margin:6px 0;text-align:center;min-height:0}
+    .qr-sec h3{font-size:15pt;color:#5A4A24;margin:0 0 6px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-sec img{display:block;margin:0 auto}
+    .qr-steps{display:flex;flex-direction:column;gap:5px;margin:8px 0 4px;text-align:left;width:100%;max-width:340px}
+    .qr-step{font-size:11pt;color:#2A2A2A;display:flex;align-items:flex-start;gap:7px;line-height:1.4}
+    .step-num{background:#C9A961;color:#fff;font-weight:700;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:10pt;flex-shrink:0;margin-top:1px}
+    .qr-url{font-size:8pt;color:#aaa;word-break:break-all;margin-top:4px}
+    .qr-div{text-align:center;color:#C9A961;font-size:13pt;margin:2px 0;letter-spacing:2px;font-weight:600}
+  `;
+
+  const pages = ev.stations.map(st => {
+    const subUrl = `${baseUrl}#submit-form/${st.id}`;
+    const subQrImg = makeQR(subUrl);
+    return `<div class='qr-pg'>
+      <div class='qr-hd'>
+        __LOGO__
+        <h1>${esc(ev.name)}</h1>
+        <h2>${esc(st.name)}</h2>
+        <p>${esc(ev.date)} · ${esc(ev.location)}</p>
+        ${ev.speaker?`<p>วิทยากร: ${esc(ev.speaker)}</p>`:''}
+      </div>
+      <div class='qr-sec'>
+        <h3>📤 ส่งผลงาน · ${esc(st.name)}</h3>
+        <img src='${subQrImg}' width='220' height='220'/>
+        <div class='qr-steps'>
+          <div class='qr-step'><span class='step-num'>1</span> เปิดกล้องโทรศัพท์ แล้วสแกน QR นี้</div>
+          <div class='qr-step'><span class='step-num'>2</span> กรอกชื่อ-นามสกุล โรงเรียน และรายละเอียดผลงาน</div>
+          <div class='qr-step'><span class='step-num'>3</span> แนบไฟล์ผลงาน (ถ้ามี) แล้วกด <b>"ส่งผลงาน"</b></div>
+        </div>
+        <p class='qr-url'>${esc(subUrl)}</p>
+      </div>
+      <div class='qr-div'>━━━━━ ✦ ━━━━━</div>
+      <div class='qr-sec'>
+        <h3>⭐ ประเมินความพึงพอใจ</h3>
+        <img src='${evalQrImg}' width='220' height='220'/>
+        <div class='qr-steps'>
+          <div class='qr-step'><span class='step-num'>1</span> เปิดกล้องโทรศัพท์ แล้วสแกน QR นี้</div>
+          <div class='qr-step'><span class='step-num'>2</span> เลือกฐานที่เข้าร่วม กรอกข้อมูลส่วนตัว</div>
+          <div class='qr-step'><span class='step-num'>3</span> ให้คะแนนความพึงพอใจ แล้วกด <b>"ส่งแบบประเมิน"</b></div>
+        </div>
+        <p class='qr-url'>${esc(evalUrl)}</p>
+      </div>
+    </div>`;
+  });
+
+  generatePagedPdf(pages, `QRcode_${ev.name.slice(0,30)}.pdf`, css);
+}
+
+function generateEvalQROnly(){
+  const ev = getCurrentEvent();
+  const baseUrl = (document.getElementById('qrBaseUrl')?.value || '').trim() || (location.origin + location.pathname);
+  const evalUrl = `${baseUrl}#evaluate`;
+  const evalQrImg = makeQR(evalUrl, 360);
+
+  const css = `
+    *{box-sizing:border-box}
+    body,div,h1,h2,h3,p{margin:0;padding:0;font-family:'Sarabun','TH SarabunPSK',sans-serif;color:#2A2A2A}
+    .qr-pg{width:210mm;height:297mm;padding:20mm 24mm;background:#fff;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+    .qr-pg h1{font-size:22pt;color:#5A4A24;margin:14px 0 6px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg h2{font-size:17pt;color:#8C7233;font-weight:700;margin:0 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg .info{font-size:12pt;color:#444;margin-bottom:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-pg .qr-box{border:3px dashed #C9A961;border-radius:16px;padding:24px 36px;background:#fff;width:100%}
+    .qr-pg .qr-box img{display:block;margin:0 auto}
+    .qr-pg .label{font-size:17pt;color:#5A4A24;margin:0 0 12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+    .qr-steps{display:flex;flex-direction:column;gap:8px;margin:14px 0 4px;text-align:left;width:100%;max-width:360px;align-self:center}
+    .qr-step{font-size:13pt;color:#2A2A2A;display:flex;align-items:flex-start;gap:10px;line-height:1.4}
+    .step-num{background:#C9A961;color:#fff;font-weight:700;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:11pt;flex-shrink:0;margin-top:1px}
+    .qr-pg .url{font-size:10pt;color:#aaa;margin-top:10px;word-break:break-all}
+  `;
+  const page = `<div class='qr-pg'>
+    __LOGO__
+    <h1>${esc(ev?.name||'')}</h1>
+    <h2>แบบประเมินความพึงพอใจ</h2>
+    <div class='info'>${esc(ev?.date||'')} · ${esc(ev?.location||'')}</div>
+    <div class='qr-box'>
+      <div class='label'>⭐ สแกน QR เพื่อทำแบบประเมิน</div>
+      <img src='${evalQrImg}' width='320' height='320'/>
+      <div class='qr-steps'>
+        <div class='qr-step'><span class='step-num'>1</span> เปิดกล้องโทรศัพท์ แล้วสแกน QR Code นี้</div>
+        <div class='qr-step'><span class='step-num'>2</span> เลือกฐานที่เข้าร่วม และกรอกข้อมูลส่วนตัว</div>
+        <div class='qr-step'><span class='step-num'>3</span> ให้คะแนนความพึงพอใจในแต่ละด้าน แล้วกด <b>"ส่งแบบประเมิน"</b></div>
+      </div>
+      <div class='url'>${esc(evalUrl)}</div>
+    </div>
+  </div>`;
+  generatePagedPdf([page], `QR_ประเมิน_${(ev?.name||'event').slice(0,30)}.pdf`, css);
+}
+
+function clearDraft(stationId){
+  const ev = getCurrentEvent();
+  if(!ev) return;
+  try{ localStorage.removeItem(`draft_submit_${ev.id}_${stationId}`); } catch(e){}
+  const notice = document.getElementById('draftNotice');
+  if(notice) notice.style.display = 'none';
+  document.getElementById('submitForm')?.reset();
+  toast('ล้างข้อมูลที่บันทึกไว้แล้ว');
+}
+
+/* ============================================================
+   JUDGING — FIRESTORE HELPERS
+   ============================================================ */
+function judgingDocId(eventId, stationId){ return `${eventId}_${stationId}`; }
+
+async function getJudging(eventId, stationId){
+  const snap = await db.collection('judging').doc(judgingDocId(eventId,stationId)).get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function saveJudging(eventId, stationId, rankings){
+  await db.collection('judging').doc(judgingDocId(eventId,stationId)).set({
+    eventId, stationId, rankings,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, {merge:true});
+}
+
+async function getAllJudgingForEvent(eventId){
+  const snap = await db.collection('judging').where('eventId','==',eventId).get();
+  const result = {};
+  snap.docs.forEach(d=>{ result[d.data().stationId] = d.data(); });
+  return result;
+}
+
+function judgeStatus(subs, judging){
+  if(!judging || !judging.rankings || Object.keys(judging.rankings).length === 0) return 'pending';
+  const ranked = Object.values(judging.rankings).filter(v=>v>0).length;
+  return ranked >= subs.length ? 'done' : 'progress';
+}
+
+function badgeHTML(status){
+  const map = {
+    done: ['badge-done','ตัดสินแล้ว'],
+    progress: ['badge-progress','อยู่ในระหว่างตัดสิน'],
+    pending: ['badge-pending','ยังไม่ตัดสิน'],
+  };
+  const [cls, label] = map[status] || map.pending;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+/* ============================================================
+   JUDGING — STATION LIST PAGE
+   ============================================================ */
+async function renderJudgeList(app){
+  const ev = getCurrentEvent();
+  if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">ตัดสินผลงานในฐาน</div>
+      </div>
+      <div style="margin-bottom:14px;font-size:13px;color:var(--ink-soft)">${esc(ev.name)}</div>
+      <div id="judgeListContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span></div></div>
+    </div>`;
+  // Load all submissions and judging data
+  const [allSubs, allJudging] = await Promise.all([
+    getSubmissions(ev.id),
+    getAllJudgingForEvent(ev.id),
+  ]);
+  const byStation = {};
+  ev.stations.forEach(s => byStation[s.id] = { station: s, subs: [] });
+  allSubs.forEach(s => {
+    if(byStation[s.stationId]) byStation[s.stationId].subs.push(s);
+  });
+  document.getElementById('judgeListContent').innerHTML = `
+    <div class="station-list">
+      ${ev.stations.map((st,i) => {
+        const subs = byStation[st.id]?.subs || [];
+        const jd = allJudging[st.id] || null;
+        const status = judgeStatus(subs, jd);
+        return `<button class="station-item" onclick="navigate('judge-station','${st.id}')">
+          <div class="station-num">${i+1}</div>
+          <div class="station-name" style="flex:1">
+            <div>${esc(st.name)}</div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:8px">
+              ${badgeHTML(status)}
+              <span style="font-size:12px;color:var(--ink-soft)">${subs.length} ผลงาน</span>
+            </div>
+          </div>
+          <div class="station-arrow"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+        </button>`;
+      }).join('')}
+    </div>`;
+}
+
+/* ============================================================
+   JUDGING — STATION DETAIL PAGE
+   ============================================================ */
+const _judgeState = { unsaved: false, cleanup: null };
+
+async function renderJudgeStation(app, stationId){
+  const ev = getCurrentEvent();
+  if(!ev){ navigate('judge'); return; }
+  const station = ev.stations.find(s=>s.id===stationId);
+  if(!station){ navigate('judge'); return; }
+
+  app.innerHTML = `
+    <div class="page">
+      <div class="page-head">
+        <button class="back-btn" id="judgeBackBtn"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
+        <div class="page-title">ผลงาน · ${esc(station.name)}</div>
+        <button class="btn" id="judgeExportBtn" style="padding:8px 14px;font-size:13px;opacity:.6" title="บันทึกก่อนจึงจะ Export ได้">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Excel
+        </button>
+      </div>
+      <div id="judgeStationContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span></div></div>
+    </div>`;
+
+  const [subs, judging] = await Promise.all([
+    getSubmissions(ev.id).then(all => all.filter(s=>s.stationId===stationId)),
+    getJudging(ev.id, stationId),
+  ]);
+
+  // Current rankings in memory: { submissionId: rank (1-N or 0=unset) }
+  let rankings = Object.assign({}, judging?.rankings || {});
+  _judgeState.unsaved = false;
+
+  function getRank(subId){ return rankings[subId] || 0; }
+
+  // Store subs in global map so onclick can look up by ID safely
+  window._judgeSubsMap = {};
+  subs.forEach(s => { window._judgeSubsMap[s.id] = s; });
+
+  function renderTable(){
+    const total = subs.length;
+    const status = judgeStatus(subs, { rankings });
+    document.getElementById('judgeStationContent').innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        ${badgeHTML(status)}
+        <span style="font-size:13px;color:var(--ink-soft)">ผลงานทั้งหมด ${total} รายการ</span>
+        <button class="btn" id="judgeSaveBtn" style="margin-left:auto;padding:8px 18px;font-size:13px">💾 บันทึกผลการตัดสิน</button>
+      </div>
+      <div class="table-wrap">
+        <table id="judgeTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>ชื่อ-นามสกุล</th>
+              <th>โรงเรียน</th>
+              <th>ชื่อผลงาน</th>
+              <th style="text-align:center">ดูผลงาน</th>
+              <th style="text-align:center;min-width:100px">ลำดับที่</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${subs.map((s,i) => `
+              <tr id="jrow_${s.id}">
+                <td>${i+1}</td>
+                <td>${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</td>
+                <td>${esc(s.school||'-')}</td>
+                <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.workTitle||s.work||'')}">${esc(s.workTitle||s.work||'-')}</td>
+                <td style="text-align:center">
+                  <button onclick="showWorkModal('${s.id}')" style="background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--gold-dark)" title="ดูผลงาน">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                  </button>
+                </td>
+                <td style="text-align:center">
+                  <select class="rank-sel" data-subid="${s.id}" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;background:var(--white);cursor:pointer;color:var(--ink)">
+                    <option value="0"${getRank(s.id)===0?' selected':''}>—</option>
+                    ${Array.from({length:total},(_,k)=>`<option value="${k+1}"${getRank(s.id)===k+1?' selected':''}>${k+1}</option>`).join('')}
+                  </select>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+
+    // Rank change handler
+    document.querySelectorAll('.rank-sel').forEach(sel => {
+      sel.addEventListener('change', ()=>{
+        const subId = sel.dataset.subid;
+        rankings[subId] = parseInt(sel.value);
+        _judgeState.unsaved = true;
+        renderTable(); // re-render to update badge
+      });
+    });
+
+    // Save button
+    document.getElementById('judgeSaveBtn')?.addEventListener('click', async ()=>{
+      const btn = document.getElementById('judgeSaveBtn');
+      btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+      try{
+        await saveJudging(ev.id, stationId, rankings);
+        _judgeState.unsaved = false;
+        window.onbeforeunload = null;
+        await Swal.fire({
+          icon:'success', title:'บันทึกผลการตัดสินแล้ว',
+          timer:2000, timerProgressBar:true, showConfirmButton:false,
+          confirmButtonColor:'#C9A961',
+        });
+        renderTable();
+      } catch(err){
+        Swal.fire({icon:'error',title:'บันทึกไม่สำเร็จ',text:err.message,confirmButtonColor:'#c43d3d'});
+        btn.disabled = false;
+      }
+    });
+  }
+
+  renderTable();
+
+  // Export button
+  document.getElementById('judgeExportBtn').addEventListener('click', ()=>{
+    if(_judgeState.unsaved){
+      Swal.fire({icon:'warning',title:'มีข้อมูลที่ยังไม่บันทึก',text:'กรุณากดบันทึกก่อน Export',confirmButtonColor:'#C9A961'});
+      return;
+    }
+    exportJudgingExcel(ev, station, subs, rankings);
+  });
+
+  // Back button with unsaved check
+  document.getElementById('judgeBackBtn').addEventListener('click', async ()=>{
+    if(_judgeState.unsaved){
+      const result = await Swal.fire({
+        icon:'warning', title:'มีข้อมูลที่ยังไม่บันทึก',
+        text:'ต้องการออกโดยไม่บันทึกหรือไม่?',
+        showCancelButton:true,
+        confirmButtonText:'ออกโดยไม่บันทึก',
+        cancelButtonText:'อยู่หน้านี้ต่อ',
+        confirmButtonColor:'#c43d3d', cancelButtonColor:'#C9A961',
+      });
+      if(!result.isConfirmed) return;
+    }
+    window.onbeforeunload = null;
+    _judgeState.unsaved = false;
+    navigate('judge');
+  });
+
+  // Browser tab close / refresh warning
+  window.onbeforeunload = (e) => {
+    if(_judgeState.unsaved){ e.preventDefault(); e.returnValue=''; }
+  };
+}
+
+function showWorkModal(subId){
+  const s = window._judgeSubsMap?.[subId];
+  if(!s){ toast('ไม่พบข้อมูลผลงาน','error'); return; }
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">📄 ผลงาน</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--cream);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px">
+        <div><b>${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</b> · ${esc(s.school||'')}</div>
+        <div style="color:var(--ink-soft);margin-top:2px">${esc(s.stationName||'')}</div>
+      </div>
+      ${s.workTitle ? `<div style="font-weight:700;font-size:15px;color:var(--gold-deep);margin-bottom:8px">${esc(s.workTitle)}</div>` : ''}
+      <div style="white-space:pre-wrap;font-size:14px;line-height:1.8;background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px;max-height:320px;overflow-y:auto">${esc(s.work||'(ไม่มีเนื้อหา)')}</div>
+      ${s.fileUrl ? `<div style="margin-top:12px"><a href="${esc(s.fileUrl)}" target="_blank" class="btn btn-ghost" style="font-size:13px;padding:8px 14px">📎 ดูไฟล์แนบ</a></div>` : ''}
+    </div>`;
+  document.getElementById('modalBg').classList.add('show');
+}
+
+function exportJudgingExcel(ev, station, subs, rankings){
+  const wb = XLSX.utils.book_new();
+  const rows = subs
+    .map(s=>({ ...s, _rank: rankings[s.id]||0 }))
+    .sort((a,b)=> a._rank===0 ? 1 : b._rank===0 ? -1 : a._rank-b._rank)
+    .map((s,i)=>({
+      ลำดับที่ตัดสิน: s._rank||'-',
+      คำนำหน้า: s.title||'', ชื่อ: s.firstName||'', นามสกุล: s.lastName||'',
+      โรงเรียน: s.school||'', ชื่อผลงาน: s.workTitle||'', เนื้อหาผลงาน: s.work||'',
+      ลิงก์ไฟล์: s.fileUrl||'',
+    }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length?rows:[{}]), sanitizeSheetName(station.name));
+  XLSX.writeFile(wb, `ตัดสิน_${sanitizeSheetName(station.name)}_${ev.name.slice(0,20)}_${fmtDate(new Date())}.xlsx`);
+  toast('ดาวน์โหลด Excel แล้ว ✓');
+}
+
+/* ----- Clear Data Menu ----- */
+function showClearDataMenu(){
+  const modal = document.getElementById('modal');
+  const ev = getCurrentEvent();
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title" style="color:#c43d3d">🗑 ล้างข้อมูลในระบบ</div>
+      <button class="close-btn" onclick="showSettingsMenu()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#7f1d1d">
+        ⚠️ การลบข้อมูลไม่สามารถย้อนกลับได้ กรุณาสำรองข้อมูลก่อนด้วย Excel
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:8px">รายการปัจจุบัน: ${esc(ev?.name||'-')}</div>
+      <div class="settings-menu">
+        <button class="settings-item" onclick="confirmClearData('submissions')" style="border-color:#fecaca">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="#c43d3d" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          <div class="settings-text"><div class="settings-title" style="color:#c43d3d">ลบข้อมูลการส่งผลงาน</div><div class="settings-desc">ผลงานทั้งหมดของรายการนี้</div></div>
+        </button>
+        <button class="settings-item" onclick="confirmClearData('evaluations')" style="border-color:#fecaca">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="#c43d3d" stroke-width="2" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+          <div class="settings-text"><div class="settings-title" style="color:#c43d3d">ลบข้อมูลการประเมิน</div><div class="settings-desc">แบบประเมินทั้งหมดของรายการนี้</div></div>
+        </button>
+        <button class="settings-item" onclick="confirmClearData('judging')" style="border-color:#fecaca">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="#c43d3d" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+          <div class="settings-text"><div class="settings-title" style="color:#c43d3d">ลบผลการตัดสินผลงาน</div><div class="settings-desc">ผลตัดสินทุกฐานของรายการนี้</div></div>
+        </button>
+        <button class="settings-item" onclick="confirmClearData('all')" style="border:2px solid #c43d3d">
+          <svg class="settings-icon" width="22" height="22" fill="none" stroke="#c43d3d" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          <div class="settings-text"><div class="settings-title" style="color:#c43d3d;font-weight:700">ลบทุกอย่าง (ผลงาน + ประเมิน + ตัดสิน)</div><div class="settings-desc">ล้างข้อมูลทั้งหมดของรายการนี้</div></div>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function confirmClearData(type){
+  const ev = getCurrentEvent();
+  if(!ev) return;
+  const labels = {
+    submissions: 'ข้อมูลการส่งผลงาน',
+    evaluations: 'ข้อมูลการประเมิน',
+    judging: 'ผลการตัดสินผลงาน',
+    all: 'ข้อมูลทั้งหมด (ผลงาน + ประเมิน + ตัดสิน)',
+  };
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: `ยืนยันการลบ${labels[type]}?`,
+    html: `<div style="font-family:'Sarabun',sans-serif;font-size:14px;color:#444">
+      รายการ: <b>${esc(ev.name)}</b><br>
+      การกระทำนี้<b style="color:#c43d3d">ไม่สามารถย้อนกลับได้</b>
+    </div>`,
+    showCancelButton: true,
+    confirmButtonText: 'ลบเลย',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#c43d3d',
+    cancelButtonColor: '#C9A961',
+    input: 'text',
+    inputPlaceholder: 'พิมพ์ "ยืนยัน" เพื่อดำเนินการต่อ',
+    preConfirm: (val) => {
+      if(val !== 'ยืนยัน'){
+        Swal.showValidationMessage('กรุณาพิมพ์ "ยืนยัน" ให้ถูกต้อง');
+        return false;
+      }
+    }
+  });
+  if(!result.isConfirmed) return;
+
+  const loading = Swal.fire({ title:'กำลังลบข้อมูล...', allowOutsideClick:false, didOpen:()=>Swal.showLoading() });
+  try{
+    const batch = db.batch();
+    const deleteCol = async (col, field) => {
+      const snap = await db.collection(col).where(field,'==',ev.id).get();
+      snap.docs.forEach(d => batch.delete(d.ref));
+    };
+    if(type==='submissions'||type==='all') await deleteCol('submissions','eventId');
+    if(type==='evaluations'||type==='all') await deleteCol('evaluations','eventId');
+    if(type==='judging'||type==='all') await deleteCol('judging','eventId');
+    await batch.commit();
+    await loading;
+    Swal.fire({ icon:'success', title:'ลบข้อมูลเรียบร้อย', timer:2000, timerProgressBar:true, showConfirmButton:false });
+    render();
+    showSettingsMenu();
+  } catch(err){
+    await loading;
+    Swal.fire({ icon:'error', title:'เกิดข้อผิดพลาด', text:err.message, confirmButtonColor:'#c43d3d' });
+  }
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+async function init(){
+  showLoader(document.getElementById('app'), 'กำลังเชื่อมต่อระบบ...');
+  try{
+    await loadAllData();
+    render();
+  } catch(e){
+    console.error(e);
+    document.getElementById('app').innerHTML = `<div class="page"><div style="color:#c43d3d;text-align:center;padding:30px">เกิดข้อผิดพลาด: ${esc(e.message)}<br><br><button class="btn" onclick="location.reload()">โหลดใหม่</button></div></div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
