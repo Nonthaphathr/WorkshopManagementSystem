@@ -1028,6 +1028,131 @@ function renderSubmitForm(app, stationKey){
   });
 }
 
+/* ============================================================
+   EDIT / DELETE SUBMISSION
+   ============================================================ */
+async function editSubmission(subId){
+  let sub;
+  try{
+    const doc = await db.collection('submissions').doc(subId).get();
+    if(!doc.exists){ toast('ไม่พบข้อมูลผลงาน','error'); return; }
+    sub = {id: doc.id, ...doc.data()};
+  } catch(e){ toast('โหลดข้อมูลไม่สำเร็จ: '+e.message,'error'); return; }
+
+  const ev = getCurrentEvent();
+  const stations = ev?.stations || [];
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">✏️ แก้ไขผลงาน</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>ฐาน</label>
+        <select class="input" id="editStation">
+          ${stations.map(s=>`<option value="${esc(s.id)}" ${s.id===sub.stationId?'selected':''}>${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>คำนำหน้า <span class="req">*</span></label>
+        <select class="input" id="editTitle">
+          ${['เด็กชาย','เด็กหญิง','นาย','นางสาว','นาง'].map(t=>`<option ${sub.title===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>ชื่อ <span class="req">*</span></label>
+        <input class="input" id="editFirstName" value="${esc(sub.firstName||'')}">
+      </div>
+      <div class="form-row">
+        <label>นามสกุล <span class="req">*</span></label>
+        <input class="input" id="editLastName" value="${esc(sub.lastName||'')}">
+      </div>
+      <div class="form-row">
+        <label>โรงเรียน <span class="req">*</span></label>
+        <input class="input" id="editSchool" value="${esc(sub.school||'')}">
+      </div>
+      <div class="form-row">
+        <label>ชื่อผลงาน</label>
+        <input class="input" id="editWorkTitle" value="${esc(sub.workTitle||'')}">
+      </div>
+      <div class="form-row">
+        <label>เนื้อหาผลงาน</label>
+        <textarea class="textarea" id="editWork">${esc(sub.work||'')}</textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveEditSubmission('${subId}')">💾 บันทึก</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+}
+
+async function saveEditSubmission(subId){
+  const stationEl = document.getElementById('editStation');
+  const ev = getCurrentEvent();
+  const station = ev?.stations?.find(s=>s.id===stationEl?.value);
+  const data = {
+    stationId:   stationEl?.value || '',
+    stationName: station?.name || stationEl?.options[stationEl.selectedIndex]?.text || '',
+    title:       document.getElementById('editTitle').value,
+    firstName:   document.getElementById('editFirstName').value.trim(),
+    lastName:    document.getElementById('editLastName').value.trim(),
+    school:      document.getElementById('editSchool').value.trim(),
+    workTitle:   document.getElementById('editWorkTitle').value.trim(),
+    work:        document.getElementById('editWork').value.trim(),
+    updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  if(!data.firstName||!data.lastName||!data.school){
+    toast('กรุณากรอกข้อมูลให้ครบถ้วน','warn'); return;
+  }
+  try{
+    await db.collection('submissions').doc(subId).update(data);
+    toast('บันทึกการแก้ไขเรียบร้อยแล้ว ✓');
+    closeModal();
+    await loadAllData();
+    render();
+  } catch(e){
+    toast('บันทึกไม่สำเร็จ: '+e.message,'error');
+  }
+}
+
+async function deleteSubmission(subId, displayName){
+  const pw = state.settings.adminPassword || ADMIN_PASSWORD;
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'ลบผลงาน?',
+    html: `<div style="font-family:'Sarabun',sans-serif;font-size:14px;color:#444">
+      <b>${esc(displayName)}</b><br>
+      การกระทำนี้<b style="color:#c43d3d">ไม่สามารถย้อนกลับได้</b><br><br>
+      กรุณาใส่รหัสผ่านเพื่อยืนยัน
+    </div>`,
+    input: 'password',
+    inputPlaceholder: 'รหัสผ่านผู้ดูแลระบบ',
+    inputAttributes: { autocomplete: 'off' },
+    showCancelButton: true,
+    confirmButtonText: '🗑️ ลบเลย',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#c43d3d',
+    cancelButtonColor: '#C9A961',
+    preConfirm: (val) => {
+      if(val !== pw){
+        Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง');
+        return false;
+      }
+    }
+  });
+  if(!result.isConfirmed) return;
+  try{
+    await db.collection('submissions').doc(subId).delete();
+    toast('ลบผลงานเรียบร้อยแล้ว ✓');
+    await reloadSubmissionsReport();
+  } catch(e){
+    toast('ลบไม่สำเร็จ: '+e.message,'error');
+  }
+}
+
 function renderEvaluate(app){
   const ev = getCurrentEvent();
   if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
@@ -1210,9 +1335,9 @@ async function reloadSubmissionsReport(){
     <h3 style="font-size:14px;color:var(--gold-deep);margin:18px 0 6px">รายการผลงาน</h3>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>ฐาน</th><th>ชื่อ-นามสกุล</th><th>โรงเรียน</th><th>ชื่อผลงาน</th><th>เนื้อหาผลงาน</th><th>ไฟล์</th></tr></thead>
+        <thead><tr><th>#</th><th>ฐาน</th><th>ชื่อ-นามสกุล</th><th>โรงเรียน</th><th>ชื่อผลงาน</th><th>เนื้อหาผลงาน</th><th>ไฟล์</th><th>จัดการ</th></tr></thead>
         <tbody>
-          ${subs.length===0 ? '<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:30px">ยังไม่มีข้อมูล</td></tr>' :
+          ${subs.length===0 ? '<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:30px">ยังไม่มีข้อมูล</td></tr>' :
           subs.map((s,i)=>`
             <tr>
               <td>${i+1}</td>
@@ -1222,6 +1347,10 @@ async function reloadSubmissionsReport(){
               <td style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.workTitle||s.work||'')}">${esc(s.workTitle||'-')}</td>
               <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.work||'')}">${esc(s.work||'-')}</td>
               <td>${s.fileUrl?`<a href="${esc(s.fileUrl)}" target="_blank" style="color:var(--gold-dark);text-decoration:underline">เปิด</a>`:'-'}</td>
+              <td style="white-space:nowrap">
+                <button onclick="editSubmission('${esc(s.id)}')" title="แก้ไข" style="padding:4px 8px;background:var(--cream);border:1px solid var(--gold-light);border-radius:6px;cursor:pointer;font-size:13px;margin-right:4px;color:var(--gold-deep)" onmouseover="this.style.background='var(--gold-light)'" onmouseout="this.style.background='var(--cream)'">✏️</button>
+                <button onclick="deleteSubmission('${esc(s.id)}','${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}')" title="ลบ" style="padding:4px 8px;background:#fff5f5;border:1px solid #fecaca;border-radius:6px;cursor:pointer;font-size:13px;color:#c43d3d" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff5f5'">🗑️</button>
+              </td>
             </tr>
           `).join('')}
         </tbody>
