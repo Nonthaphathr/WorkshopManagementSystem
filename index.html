@@ -662,7 +662,7 @@ async function deleteEvent(id){
 }
 
 async function getSubmissions(eventId){
-  const snap = await db.collection('submissions').where('eventId','==',eventId).get();
+  const snap = await db.collection('submissions').where('eventId','==',eventId).get({ source: 'server' });
   const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
   docs.sort((a,b)=>{
     const ta = (a.updatedAt || a.createdAt)?.toMillis?.() ?? 0;
@@ -1153,7 +1153,8 @@ async function deleteSubmission(subId, displayName){
   try{
     await db.collection('submissions').doc(subId).delete();
     toast('ลบผลงานเรียบร้อยแล้ว ✓');
-    await reloadSubmissionsReport();
+    await loadAllData();
+    render();
   } catch(e){
     toast('ลบไม่สำเร็จ: '+e.message,'error');
   }
