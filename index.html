@@ -290,6 +290,14 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+/* Enable offline persistence (IndexedDB) — subsequent loads hit local cache first
+   and the app keeps working on flaky / slow networks. Safe to ignore if it fails
+   (e.g. multiple tabs without synchronizeTabs, or private-browsing mode). */
+try{
+  db.enablePersistence({synchronizeTabs:true}).catch(err=>{
+    console.warn('Firestore persistence not enabled:', err?.code || err);
+  });
+} catch(e){ console.warn('enablePersistence threw:', e); }
 
 /* ============================================================
    DEFAULTS & CONSTANTS
@@ -679,10 +687,10 @@ async function deleteEvent(id){
 
 /* ── Fetch with retry + per-attempt timeout ──────────────────
    fn        : async function that returns a Firestore snapshot
-   maxRetries: total attempts (default 4)
-   timeoutMs : max ms to wait per attempt before giving up (default 18000)
+   maxRetries: total attempts (default 3)
+   timeoutMs : max ms to wait per attempt before giving up (default 20000)
    ------------------------------------------------------------ */
-async function fetchWithRetry(fn, maxRetries=3, timeoutMs=10000){
+async function fetchWithRetry(fn, maxRetries=3, timeoutMs=20000){
   let lastErr;
   for(let attempt=1; attempt<=maxRetries; attempt++){
     try{
@@ -704,34 +712,63 @@ async function fetchWithRetry(fn, maxRetries=3, timeoutMs=10000){
   throw lastErr;
 }
 
+/* In-flight promise dedup: ถ้ามีคำขอเดิมค้างอยู่ ให้ใช้ promise เดิมแทนการยิงซ้ำ */
+const _pendingFetches = {
+  submissions: {},   // { [eventId]: Promise }
+  evaluations: {},
+};
+
 async function getSubmissions(eventId, forceServer=false){
-  // Use cache only if it exists AND is not empty AND not forced to refresh
-  if(!forceServer && _cache.submissions[eventId] && _cache.submissions[eventId].length > 0){
+  // ใช้แคชถ้ามี (รวมกรณีผลลัพธ์ว่าง = 0 รายการ ก็ถือว่าแคชใช้ได้)
+  if(!forceServer && _cache.submissions[eventId]){
     return _cache.submissions[eventId];
   }
-  const snap = await fetchWithRetry(()=>
-    db.collection('submissions').where('eventId','==',eventId).get()
-  );
-  const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  docs.sort((a,b)=>{
-    const ta = (a.updatedAt || a.createdAt)?.toMillis?.() ?? 0;
-    const tb = (b.updatedAt || b.createdAt)?.toMillis?.() ?? 0;
-    return tb - ta;
-  });
-  _cache.submissions[eventId] = docs;
-  return docs;
+  // ดูดคำขอที่ค้างอยู่ ไม่ยิงซ้ำ
+  if(_pendingFetches.submissions[eventId]){
+    return _pendingFetches.submissions[eventId];
+  }
+  const promise = (async ()=>{
+    try{
+      const snap = await fetchWithRetry(()=>
+        db.collection('submissions').where('eventId','==',eventId).get()
+      );
+      const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      docs.sort((a,b)=>{
+        const ta = (a.updatedAt || a.createdAt)?.toMillis?.() ?? 0;
+        const tb = (b.updatedAt || b.createdAt)?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
+      _cache.submissions[eventId] = docs;
+      return docs;
+    } finally {
+      delete _pendingFetches.submissions[eventId];
+    }
+  })();
+  _pendingFetches.submissions[eventId] = promise;
+  return promise;
 }
 
 async function getEvaluations(eventId, forceServer=false){
-  if(!forceServer && _cache.evaluations[eventId] && _cache.evaluations[eventId].length > 0){
+  if(!forceServer && _cache.evaluations[eventId]){
     return _cache.evaluations[eventId];
   }
-  const snap = await fetchWithRetry(()=>
-    db.collection('evaluations').where('eventId','==',eventId).get()
-  );
-  const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  _cache.evaluations[eventId] = docs;
-  return docs;
+  if(_pendingFetches.evaluations[eventId]){
+    return _pendingFetches.evaluations[eventId];
+  }
+  const promise = (async ()=>{
+    try{
+      const snap = await fetchWithRetry(()=>
+        db.collection('evaluations').where('eventId','==',eventId).get()
+      );
+      const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      _cache.evaluations[eventId] = docs;
+      return docs;
+    } finally {
+      delete _pendingFetches.evaluations[eventId];
+    }
+  })();
+  _pendingFetches.evaluations[eventId] = promise;
+  return promise;
 }
 
 async function getAllEvaluations(){
@@ -1378,20 +1415,31 @@ function _reportErrorHTML(retryFn, msg){
   </div>`;
 }
 
+/* Generation counter — ป้องกัน stale write ถ้ามีการเรียก reload ซ้อนระหว่างกำลังโหลด
+   (เช่น ผู้ใช้สลับ event หรือเด้งกลับมาหน้านี้ก่อน fetch รอบเก่าจะเสร็จ) */
+let _subReportGen = 0;
+
 async function reloadSubmissionsReport(){
+  const myGen = ++_subReportGen;
   const container = document.getElementById('subReportContent');
   if(!container) return;
   const ev = getCurrentEvent();
+  if(!ev) return;
   // Show loading state (important when called from retry button)
   container.innerHTML = '<div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div>';
   let subs;
   try{
     subs = await getSubmissions(ev.id);
   } catch(e){
+    if(myGen !== _subReportGen) return;          // มีคำขอใหม่กว่ามาแล้ว — ไม่ต้องเขียนทับ
+    if(!container.isConnected) return;            // container หลุดจาก DOM แล้ว
     _cache.invalidate('submissions', ev.id); // clear bad/empty cache so retry fetches fresh
     container.innerHTML = _reportErrorHTML('reloadSubmissionsReport', e.message);
     return;
   }
+  // Stale guard ก่อนเขียน DOM
+  if(myGen !== _subReportGen) return;
+  if(!container.isConnected) return;
   const byStation = {};
   ev.stations.forEach(s=>byStation[s.id] = {name:s.name, items:[]});
   subs.forEach(s=>{
@@ -1510,19 +1558,27 @@ async function renderReportEvaluations(app){
   await reloadEvaluationsReport();
 }
 
+let _evalReportGen = 0;
+
 async function reloadEvaluationsReport(){
+  const myGen = ++_evalReportGen;
   const container = document.getElementById('evalReportContent');
   if(!container) return;
   const ev = getCurrentEvent();
+  if(!ev) return;
   container.innerHTML = '<div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div>';
   let evals;
   try{
     evals = await getEvaluations(ev.id);
   } catch(e){
+    if(myGen !== _evalReportGen) return;
+    if(!container.isConnected) return;
     _cache.invalidate('evaluations', ev.id);
     container.innerHTML = _reportErrorHTML('reloadEvaluationsReport', e.message);
     return;
   }
+  if(myGen !== _evalReportGen) return;
+  if(!container.isConnected) return;
   const cats = state.settings.questions;
   if(evals.length === 0){
     container.innerHTML = `<div class="loading-state">ยังไม่มีผู้ตอบแบบประเมิน</div>`;
@@ -1967,84 +2023,145 @@ function showExportMenu(){
 }
 
 async function exportSubmissions(){
-  toast('กำลังเตรียมไฟล์...');
   const ev = getCurrentEvent();
-  const [subs, allJudging] = await Promise.all([
-    getSubmissions(ev.id),
-    getAllJudgingForEvent(ev.id),
-  ]);
-  // Build quick rank lookup: stationId → {submissionId → rank}
-  const rankLookup = {};
-  Object.entries(allJudging).forEach(([stId, jd])=>{
-    rankLookup[stId] = jd.rankings || {};
+  if(!ev){
+    Swal.fire({icon:'warning',title:'ยังไม่มีรายการกิจกรรม',confirmButtonColor:'#C9A961'});
+    return;
+  }
+  Swal.fire({
+    title:'กำลังเตรียมไฟล์...',
+    html:'<span style="font-size:13px;color:#666">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจาก Firestore</span>',
+    allowOutsideClick:false,
+    didOpen:()=>Swal.showLoading(),
   });
-  const getR = (s) => rankLookup[s.stationId]?.[s.id] || '-';
+  try{
+    const [subs, allJudging] = await Promise.all([
+      getSubmissions(ev.id),
+      getAllJudgingForEvent(ev.id),
+    ]);
+    // Build quick rank lookup: stationId → {submissionId → rank}
+    const rankLookup = {};
+    Object.entries(allJudging).forEach(([stId, jd])=>{
+      rankLookup[stId] = jd.rankings || {};
+    });
+    const getR = (s) => rankLookup[s.stationId]?.[s.id] || '-';
 
-  const wb = XLSX.utils.book_new();
-  const all = subs.map((s,i)=>({
-    ลำดับ:i+1, ฐาน:s.stationName||'', คำนำหน้า:s.title||'',
-    ชื่อ:s.firstName||'', นามสกุล:s.lastName||'', โรงเรียน:s.school||'',
-    ชื่อผลงาน:s.workTitle||'', เนื้อหาผลงาน:s.work||'',
-    ลำดับที่ตัดสิน: getR(s),
-    ลิงก์ไฟล์:s.fileUrl||'', วันที่ส่ง: s.createdAt?.toDate?fmtDate(s.createdAt.toDate()):'',
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(all), 'ทั้งหมด');
-  ev.stations.forEach(st=>{
-    const rows = subs.filter(s=>s.stationId===st.id)
-      .sort((a,b)=>{
-        const ra = rankLookup[st.id]?.[a.id]||999;
-        const rb = rankLookup[st.id]?.[b.id]||999;
-        return ra-rb;
-      })
-      .map((s,i)=>({
-        ลำดับ:i+1, คำนำหน้า:s.title||'', ชื่อ:s.firstName||'', นามสกุล:s.lastName||'',
-        โรงเรียน:s.school||'', ชื่อผลงาน:s.workTitle||'', เนื้อหาผลงาน:s.work||'',
-        ลำดับที่ตัดสิน: getR(s),
-        ลิงก์ไฟล์:s.fileUrl||'', วันที่ส่ง: s.createdAt?.toDate?fmtDate(s.createdAt.toDate()):'',
-      }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length?rows:[{}]), sanitizeSheetName(st.name));
-  });
-  XLSX.writeFile(wb, `ผลงาน_${ev.name.slice(0,30)}_${fmtDate(new Date())}.xlsx`);
-  toast('ดาวน์โหลดเรียบร้อย ✓');
+    const wb = XLSX.utils.book_new();
+    const all = subs.map((s,i)=>({
+      ลำดับ:i+1, ฐาน:s.stationName||'', คำนำหน้า:s.title||'',
+      ชื่อ:s.firstName||'', นามสกุล:s.lastName||'', โรงเรียน:s.school||'',
+      ชื่อผลงาน:s.workTitle||'', เนื้อหาผลงาน:s.work||'',
+      ลำดับที่ตัดสิน: getR(s),
+      ลิงก์ไฟล์:s.fileUrl||'', วันที่ส่ง: s.createdAt?.toDate?fmtDate(s.createdAt.toDate()):'',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(all.length?all:[{}]), 'ทั้งหมด');
+    ev.stations.forEach(st=>{
+      const rows = subs.filter(s=>s.stationId===st.id)
+        .sort((a,b)=>{
+          const ra = rankLookup[st.id]?.[a.id]||999;
+          const rb = rankLookup[st.id]?.[b.id]||999;
+          return ra-rb;
+        })
+        .map((s,i)=>({
+          ลำดับ:i+1, คำนำหน้า:s.title||'', ชื่อ:s.firstName||'', นามสกุล:s.lastName||'',
+          โรงเรียน:s.school||'', ชื่อผลงาน:s.workTitle||'', เนื้อหาผลงาน:s.work||'',
+          ลำดับที่ตัดสิน: getR(s),
+          ลิงก์ไฟล์:s.fileUrl||'', วันที่ส่ง: s.createdAt?.toDate?fmtDate(s.createdAt.toDate()):'',
+        }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length?rows:[{}]), uniqueSheetName(wb, sanitizeSheetName(st.name)));
+    });
+    XLSX.writeFile(wb, `ผลงาน_${ev.name.slice(0,30)}_${fmtDate(new Date())}.xlsx`);
+    Swal.close();
+    toast('ดาวน์โหลดเรียบร้อย ✓');
+  } catch(err){
+    console.error('exportSubmissions error:', err);
+    Swal.fire({
+      icon:'error',
+      title:'ส่งออกไฟล์ไม่สำเร็จ',
+      html:`<div style="font-size:13px;color:#444;text-align:left">
+        ${esc(err?.message || 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ')}<br><br>
+        <span style="color:#888">โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและลองอีกครั้ง</span>
+      </div>`,
+      confirmButtonColor:'#C9A961',
+    });
+  }
 }
 
 async function exportEvaluations(){
-  toast('กำลังเตรียมไฟล์...');
-  const all = await getAllEvaluations();
-  const cats = state.settings.questions;
-  const wb = XLSX.utils.book_new();
+  Swal.fire({
+    title:'กำลังเตรียมไฟล์...',
+    html:'<span style="font-size:13px;color:#666">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจาก Firestore</span>',
+    allowOutsideClick:false,
+    didOpen:()=>Swal.showLoading(),
+  });
+  try{
+    const all = await getAllEvaluations();
+    const cats = state.settings.questions;
+    const wb = XLSX.utils.book_new();
 
-  const rowsForList = (list)=> list.map((e,i)=>{
-    const row = {
-      ลำดับ:i+1, รายการกิจกรรม:e.eventName||'', ฐาน:e.stationName||'',
-      เพศ:e.gender||'', ระดับชั้น:e.grade||'', โรงเรียน:e.school||'',
-    };
-    ['cat1','cat2','cat3'].forEach(catKey=>{
-      cats[catKey].items.forEach((q,idx)=>{
-        row[`${cats[catKey].title.slice(0,8)}_ข้อ${idx+1}`] = e.ratings?.[`${catKey}_q${idx}`]||'';
+    const rowsForList = (list)=> list.map((e,i)=>{
+      const row = {
+        ลำดับ:i+1, รายการกิจกรรม:e.eventName||'', ฐาน:e.stationName||'',
+        เพศ:e.gender||'', ระดับชั้น:e.grade||'', โรงเรียน:e.school||'',
+      };
+      ['cat1','cat2','cat3'].forEach(catKey=>{
+        cats[catKey].items.forEach((q,idx)=>{
+          row[`${cats[catKey].title.slice(0,8)}_ข้อ${idx+1}`] = e.ratings?.[`${catKey}_q${idx}`]||'';
+        });
       });
+      (e.openAnswers||[]).forEach((oa,idx)=>{
+        row[`อัตนัย_${idx+1}`] = oa.answer||'';
+      });
+      row['วันที่ตอบ'] = e.createdAt?.toDate?fmtDate(e.createdAt.toDate()):'';
+      return row;
     });
-    (e.openAnswers||[]).forEach((oa,idx)=>{
-      row[`อัตนัย_${idx+1}`] = oa.answer||'';
-    });
-    row['วันที่ตอบ'] = e.createdAt?.toDate?fmtDate(e.createdAt.toDate()):'';
-    return row;
-  });
 
-  // Combined sheet
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsForList(all).length?rowsForList(all):[{}]), 'รวมทุกรายการ');
-  // Per-event sheets
-  const byEvent = {};
-  all.forEach(e=>{ (byEvent[e.eventId]=byEvent[e.eventId]||{name:e.eventName||e.eventId,list:[]}).list.push(e); });
-  Object.entries(byEvent).forEach(([eid, val])=>{
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsForList(val.list)), sanitizeSheetName(val.name));
-  });
-  XLSX.writeFile(wb, `ผลประเมิน_${fmtDate(new Date())}.xlsx`);
-  toast('ดาวน์โหลดเรียบร้อย ✓');
+    // Combined sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsForList(all).length?rowsForList(all):[{}]), 'รวมทุกรายการ');
+    // Per-event sheets
+    const byEvent = {};
+    all.forEach(e=>{ (byEvent[e.eventId]=byEvent[e.eventId]||{name:e.eventName||e.eventId,list:[]}).list.push(e); });
+    Object.entries(byEvent).forEach(([eid, val])=>{
+      const sheetName = uniqueSheetName(wb, eventSheetName(val.name));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsForList(val.list)), sheetName);
+    });
+    XLSX.writeFile(wb, `ผลประเมิน_${fmtDate(new Date())}.xlsx`);
+    Swal.close();
+    toast('ดาวน์โหลดเรียบร้อย ✓');
+  } catch(err){
+    console.error('exportEvaluations error:', err);
+    Swal.fire({
+      icon:'error',
+      title:'ส่งออกไฟล์ไม่สำเร็จ',
+      html:`<div style="font-size:13px;color:#444;text-align:left">
+        ${esc(err?.message || 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ')}<br><br>
+        <span style="color:#888">โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและลองอีกครั้ง</span>
+      </div>`,
+      confirmButtonColor:'#C9A961',
+    });
+  }
 }
 
 function sanitizeSheetName(name){
   return (name||'sheet').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,30);
+}
+
+/* ดึง "ค่าย N" จากชื่อ event ถ้าเจอ ไม่งั้น fallback ไป truncate ปกติ */
+function eventSheetName(name){
+  const m = String(name||'').match(/ค่าย\s*\d+/);
+  if(m) return m[0].replace(/\s+/g,' ').trim();
+  return sanitizeSheetName(name);
+}
+
+/* คืน name ที่ไม่ซ้ำใน workbook (เติม " (2)", " (3)" ถ้าซ้ำ) */
+function uniqueSheetName(wb, name){
+  const existing = new Set(wb.SheetNames || []);
+  if(!existing.has(name)) return name;
+  for(let i=2;i<100;i++){
+    const cand = sanitizeSheetName(`${name} (${i})`);
+    if(!existing.has(cand)) return cand;
+  }
+  return sanitizeSheetName(name + Math.random().toString(36).slice(2,5));
 }
 
 function fmtDate(d){
