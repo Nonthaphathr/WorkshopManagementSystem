@@ -398,6 +398,22 @@ const state = {
 const getCurrentEvent = () => state.events.find(e=>e.id===state.currentEventId);
 
 /* ============================================================
+   IN-MEMORY CACHE (submissions / evaluations per eventId)
+   ============================================================ */
+const _cache = {
+  submissions: {},   // { [eventId]: docs[] }
+  evaluations: {},   // { [eventId]: docs[] }
+  invalidate(type, eventId){
+    if(eventId){ delete this[type][eventId]; }
+    else { this[type] = {}; }
+  },
+  invalidateAll(eventId){
+    this.invalidate('submissions', eventId);
+    this.invalidate('evaluations', eventId);
+  }
+};
+
+/* ============================================================
    UTILITIES
    ============================================================ */
 const $ = s => document.querySelector(s);
@@ -662,19 +678,24 @@ async function deleteEvent(id){
 }
 
 async function getSubmissions(eventId){
-  const snap = await db.collection('submissions').where('eventId','==',eventId).get({ source: 'server' });
+  if(_cache.submissions[eventId]) return _cache.submissions[eventId];
+  const snap = await db.collection('submissions').where('eventId','==',eventId).get();
   const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
   docs.sort((a,b)=>{
     const ta = (a.updatedAt || a.createdAt)?.toMillis?.() ?? 0;
     const tb = (b.updatedAt || b.createdAt)?.toMillis?.() ?? 0;
     return tb - ta;
   });
+  _cache.submissions[eventId] = docs;
   return docs;
 }
 
 async function getEvaluations(eventId){
+  if(_cache.evaluations[eventId]) return _cache.evaluations[eventId];
   const snap = await db.collection('evaluations').where('eventId','==',eventId).get();
-  return snap.docs.map(d=>({id:d.id, ...d.data()}));
+  const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  _cache.evaluations[eventId] = docs;
+  return docs;
 }
 
 async function getAllEvaluations(){
@@ -1117,8 +1138,8 @@ async function saveEditSubmission(subId){
     await db.collection('submissions').doc(subId).update(data);
     toast('บันทึกการแก้ไขเรียบร้อยแล้ว ✓');
     closeModal();
-    await loadAllData();
-    render();
+    _cache.invalidate('submissions', ev?.id || getCurrentEvent()?.id);
+    await reloadSubmissionsReport();
   } catch(e){
     toast('บันทึกไม่สำเร็จ: '+e.message,'error');
   }
@@ -1153,8 +1174,8 @@ async function deleteSubmission(subId, displayName){
   try{
     await db.collection('submissions').doc(subId).delete();
     toast('ลบผลงานเรียบร้อยแล้ว ✓');
-    await loadAllData();
-    render();
+    _cache.invalidate('submissions', getCurrentEvent()?.id);
+    await reloadSubmissionsReport();
   } catch(e){
     toast('ลบไม่สำเร็จ: '+e.message,'error');
   }
@@ -2948,6 +2969,9 @@ async function confirmClearData(type){
     if(type==='evaluations'||type==='all') await deleteCol('evaluations','eventId');
     if(type==='judging'||type==='all') await deleteCol('judging','eventId');
     await batch.commit();
+    // Invalidate relevant caches
+    if(type==='submissions'||type==='all') _cache.invalidate('submissions', ev.id);
+    if(type==='evaluations'||type==='all') _cache.invalidate('evaluations', ev.id);
     await loading;
     Swal.fire({ icon:'success', title:'ลบข้อมูลเรียบร้อย', timer:2000, timerProgressBar:true, showConfirmButton:false });
     render();
@@ -2959,6 +2983,29 @@ async function confirmClearData(type){
 }
 
 /* ============================================================
+   BACKGROUND PREFETCH — warm up cache for all events silently
+   ============================================================ */
+function prefetchAllEvents(){
+  // Run after a short delay so the initial render isn't blocked
+  setTimeout(async ()=>{
+    for(const ev of state.events){
+      // Skip the current event — it will be fetched on demand anyway
+      if(ev.id === state.currentEventId) continue;
+      try{
+        // Fire both fetches concurrently per event, but don't await sequentially
+        await Promise.all([
+          getSubmissions(ev.id),
+          getEvaluations(ev.id),
+        ]);
+      } catch(e){
+        // Silently ignore prefetch errors — they'll just fetch on demand later
+        console.warn('Prefetch failed for event', ev.id, e);
+      }
+    }
+  }, 1500); // 1.5 s after render — user reads the home page, data loads quietly
+}
+
+/* ============================================================
    INIT
    ============================================================ */
 async function init(){
@@ -2967,6 +3014,7 @@ async function init(){
   try{
     await loadAllData();
     render();
+    prefetchAllEvents(); // warm cache for all other events in background
   } catch(e){
     console.error(e);
     document.getElementById('app').innerHTML = `<div class="page"><div style="color:#c43d3d;text-align:center;padding:30px">เกิดข้อผิดพลาด: ${esc(e.message)}<br><br><button class="btn" onclick="location.reload()">โหลดใหม่</button></div></div>`;
