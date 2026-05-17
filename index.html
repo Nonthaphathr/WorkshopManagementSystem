@@ -398,6 +398,22 @@ const state = {
 const getCurrentEvent = () => state.events.find(e=>e.id===state.currentEventId);
 
 /* ============================================================
+   IN-MEMORY CACHE (submissions / evaluations per eventId)
+   ============================================================ */
+const _cache = {
+  submissions: {},   // { [eventId]: docs[] }
+  evaluations: {},   // { [eventId]: docs[] }
+  invalidate(type, eventId){
+    if(eventId){ delete this[type][eventId]; }
+    else { this[type] = {}; }
+  },
+  invalidateAll(eventId){
+    this.invalidate('submissions', eventId);
+    this.invalidate('evaluations', eventId);
+  }
+};
+
+/* ============================================================
    UTILITIES
    ============================================================ */
 const $ = s => document.querySelector(s);
@@ -661,14 +677,61 @@ async function deleteEvent(id){
   }
 }
 
-async function getSubmissions(eventId){
-  const snap = await db.collection('submissions').where('eventId','==',eventId).get();
-  return snap.docs.map(d=>({id:d.id, ...d.data()}));
+/* ── Fetch with retry + per-attempt timeout ──────────────────
+   fn        : async function that returns a Firestore snapshot
+   maxRetries: total attempts (default 4)
+   timeoutMs : max ms to wait per attempt before giving up (default 18000)
+   ------------------------------------------------------------ */
+async function fetchWithRetry(fn, maxRetries=3, timeoutMs=10000){
+  let lastErr;
+  for(let attempt=1; attempt<=maxRetries; attempt++){
+    try{
+      const result = await Promise.race([
+        fn(),
+        new Promise((_,reject)=>
+          setTimeout(()=>reject(new Error('การเชื่อมต่อช้าเกินไป กำลังลองครั้งที่ '+attempt+'...')), timeoutMs)
+        )
+      ]);
+      return result;
+    } catch(e){
+      lastErr = e;
+      console.warn('Firestore attempt '+attempt+'/'+maxRetries+':', e.message);
+      if(attempt < maxRetries){
+        await new Promise(r=>setTimeout(r, 1500));
+      }
+    }
+  }
+  throw lastErr;
 }
 
-async function getEvaluations(eventId){
-  const snap = await db.collection('evaluations').where('eventId','==',eventId).get();
-  return snap.docs.map(d=>({id:d.id, ...d.data()}));
+async function getSubmissions(eventId, forceServer=false){
+  // Use cache only if it exists AND is not empty AND not forced to refresh
+  if(!forceServer && _cache.submissions[eventId] && _cache.submissions[eventId].length > 0){
+    return _cache.submissions[eventId];
+  }
+  const snap = await fetchWithRetry(()=>
+    db.collection('submissions').where('eventId','==',eventId).get()
+  );
+  const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  docs.sort((a,b)=>{
+    const ta = (a.updatedAt || a.createdAt)?.toMillis?.() ?? 0;
+    const tb = (b.updatedAt || b.createdAt)?.toMillis?.() ?? 0;
+    return tb - ta;
+  });
+  _cache.submissions[eventId] = docs;
+  return docs;
+}
+
+async function getEvaluations(eventId, forceServer=false){
+  if(!forceServer && _cache.evaluations[eventId] && _cache.evaluations[eventId].length > 0){
+    return _cache.evaluations[eventId];
+  }
+  const snap = await fetchWithRetry(()=>
+    db.collection('evaluations').where('eventId','==',eventId).get()
+  );
+  const docs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  _cache.evaluations[eventId] = docs;
+  return docs;
 }
 
 async function getAllEvaluations(){
@@ -1028,6 +1091,132 @@ function renderSubmitForm(app, stationKey){
   });
 }
 
+/* ============================================================
+   EDIT / DELETE SUBMISSION
+   ============================================================ */
+async function editSubmission(subId){
+  let sub;
+  try{
+    const doc = await db.collection('submissions').doc(subId).get();
+    if(!doc.exists){ toast('ไม่พบข้อมูลผลงาน','error'); return; }
+    sub = {id: doc.id, ...doc.data()};
+  } catch(e){ toast('โหลดข้อมูลไม่สำเร็จ: '+e.message,'error'); return; }
+
+  const ev = getCurrentEvent();
+  const stations = ev?.stations || [];
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div class="modal-title">✏️ แก้ไขผลงาน</div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>ฐาน</label>
+        <select class="input" id="editStation">
+          ${stations.map(s=>`<option value="${esc(s.id)}" ${s.id===sub.stationId?'selected':''}>${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>คำนำหน้า <span class="req">*</span></label>
+        <select class="input" id="editTitle">
+          ${['เด็กชาย','เด็กหญิง','นาย','นางสาว','นาง'].map(t=>`<option ${sub.title===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>ชื่อ <span class="req">*</span></label>
+        <input class="input" id="editFirstName" value="${esc(sub.firstName||'')}">
+      </div>
+      <div class="form-row">
+        <label>นามสกุล <span class="req">*</span></label>
+        <input class="input" id="editLastName" value="${esc(sub.lastName||'')}">
+      </div>
+      <div class="form-row">
+        <label>โรงเรียน <span class="req">*</span></label>
+        <input class="input" id="editSchool" value="${esc(sub.school||'')}">
+      </div>
+      <div class="form-row">
+        <label>ชื่อผลงาน</label>
+        <input class="input" id="editWorkTitle" value="${esc(sub.workTitle||'')}">
+      </div>
+      <div class="form-row">
+        <label>เนื้อหาผลงาน</label>
+        <textarea class="textarea" id="editWork">${esc(sub.work||'')}</textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveEditSubmission('${subId}')">💾 บันทึก</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+}
+
+async function saveEditSubmission(subId){
+  const stationEl = document.getElementById('editStation');
+  const ev = getCurrentEvent();
+  const station = ev?.stations?.find(s=>s.id===stationEl?.value);
+  const data = {
+    stationId:   stationEl?.value || '',
+    stationName: station?.name || stationEl?.options[stationEl.selectedIndex]?.text || '',
+    title:       document.getElementById('editTitle').value,
+    firstName:   document.getElementById('editFirstName').value.trim(),
+    lastName:    document.getElementById('editLastName').value.trim(),
+    school:      document.getElementById('editSchool').value.trim(),
+    workTitle:   document.getElementById('editWorkTitle').value.trim(),
+    work:        document.getElementById('editWork').value.trim(),
+    updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  if(!data.firstName||!data.lastName||!data.school){
+    toast('กรุณากรอกข้อมูลให้ครบถ้วน','warn'); return;
+  }
+  try{
+    await db.collection('submissions').doc(subId).update(data);
+    toast('บันทึกการแก้ไขเรียบร้อยแล้ว ✓');
+    closeModal();
+    _cache.invalidate('submissions', ev?.id || getCurrentEvent()?.id);
+    await reloadSubmissionsReport();
+  } catch(e){
+    toast('บันทึกไม่สำเร็จ: '+e.message,'error');
+  }
+}
+
+async function deleteSubmission(subId, displayName){
+  const pw = state.settings.adminPassword || ADMIN_PASSWORD;
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'ลบผลงาน?',
+    html: `<div style="font-family:'Sarabun',sans-serif;font-size:14px;color:#444">
+      <b>${esc(displayName)}</b><br>
+      การกระทำนี้<b style="color:#c43d3d">ไม่สามารถย้อนกลับได้</b><br><br>
+      กรุณาใส่รหัสผ่านเพื่อยืนยัน
+    </div>`,
+    input: 'password',
+    inputPlaceholder: 'รหัสผ่านผู้ดูแลระบบ',
+    inputAttributes: { autocomplete: 'off' },
+    showCancelButton: true,
+    confirmButtonText: '🗑️ ลบเลย',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#c43d3d',
+    cancelButtonColor: '#C9A961',
+    preConfirm: (val) => {
+      if(val !== pw){
+        Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง');
+        return false;
+      }
+    }
+  });
+  if(!result.isConfirmed) return;
+  try{
+    await db.collection('submissions').doc(subId).delete();
+    toast('ลบผลงานเรียบร้อยแล้ว ✓');
+    _cache.invalidate('submissions', getCurrentEvent()?.id);
+    await reloadSubmissionsReport();
+  } catch(e){
+    toast('ลบไม่สำเร็จ: '+e.message,'error');
+  }
+}
+
 function renderEvaluate(app){
   const ev = getCurrentEvent();
   if(!ev){ app.innerHTML = `<div class="page">ยังไม่มีรายการกิจกรรม</div>`; return; }
@@ -1168,19 +1357,41 @@ async function renderReportSubmissions(app){
       <div class="page-head">
         <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
         <div class="page-title">รายงานสรุปการส่งผลงาน</div>
+        <button class="back-btn" title="โหลดข้อมูลใหม่" onclick="_forceRefreshSubs()" style="margin-left:auto"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
       </div>
       ${eventSelectorHTML()}
-      <div id="subReportContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div></div>
+      <div id="subReportContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span><div style="margin-top:10px">กำลังโหลดข้อมูล...<br><span style="font-size:12px;color:var(--ink-soft)">หากใช้เวลานาน ระบบจะลองใหม่อัตโนมัติ</span></div></div></div>
     </div>
   `;
   await reloadSubmissionsReport();
+}
+
+function _reportErrorHTML(retryFn, msg){
+  return `<div style="text-align:center;padding:40px 20px">
+    <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+    <div style="font-weight:700;color:#c43d3d;margin-bottom:8px">โหลดข้อมูลไม่สำเร็จ</div>
+    <div style="font-size:13px;color:var(--ink-soft);margin-bottom:20px">${msg||'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'}</div>
+    <button class="btn" onclick="${retryFn}()" style="gap:6px">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      ลองใหม่อีกครั้ง
+    </button>
+  </div>`;
 }
 
 async function reloadSubmissionsReport(){
   const container = document.getElementById('subReportContent');
   if(!container) return;
   const ev = getCurrentEvent();
-  const subs = await getSubmissions(ev.id);
+  // Show loading state (important when called from retry button)
+  container.innerHTML = '<div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div>';
+  let subs;
+  try{
+    subs = await getSubmissions(ev.id);
+  } catch(e){
+    _cache.invalidate('submissions', ev.id); // clear bad/empty cache so retry fetches fresh
+    container.innerHTML = _reportErrorHTML('reloadSubmissionsReport', e.message);
+    return;
+  }
   const byStation = {};
   ev.stations.forEach(s=>byStation[s.id] = {name:s.name, items:[]});
   subs.forEach(s=>{
@@ -1207,27 +1418,76 @@ async function reloadSubmissionsReport(){
         </div>`;
       }).join('')}
     </div>
-    <h3 style="font-size:14px;color:var(--gold-deep);margin:18px 0 6px">รายการผลงาน</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:18px 0 8px">
+      <h3 style="font-size:14px;color:var(--gold-deep);margin:0">รายการผลงาน</h3>
+      <div style="position:relative;flex:1;min-width:180px;max-width:320px">
+        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold-dark);pointer-events:none" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="subSearchBox" type="text" placeholder="ค้นหาชื่อ โรงเรียน ฐาน..." oninput="filterSubTable(this.value)"
+          style="width:100%;padding:8px 12px 8px 34px;border:1px solid var(--gold-light);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;color:var(--ink);outline:none"
+          onfocus="this.style.borderColor='var(--gold)';this.style.boxShadow='0 0 0 3px rgba(201,169,97,.15)'"
+          onblur="this.style.borderColor='var(--gold-light)';this.style.boxShadow='none'">
+      </div>
+    </div>
+    <div id="subSearchCount" style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;min-height:18px"></div>
     <div class="table-wrap">
-      <table>
-        <thead><tr><th>#</th><th>ฐาน</th><th>ชื่อ-นามสกุล</th><th>โรงเรียน</th><th>ชื่อผลงาน</th><th>เนื้อหาผลงาน</th><th>ไฟล์</th></tr></thead>
-        <tbody>
-          ${subs.length===0 ? '<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:30px">ยังไม่มีข้อมูล</td></tr>' :
+      <table id="subTable">
+        <thead><tr><th>#</th><th>ฐาน</th><th>ชื่อ-นามสกุล</th><th>โรงเรียน</th><th>ชื่อผลงาน</th><th>เนื้อหาผลงาน</th><th>ไฟล์</th><th>จัดการ</th></tr></thead>
+        <tbody id="subTableBody">
+          ${subs.length===0 ? '<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:30px">ยังไม่มีข้อมูล</td></tr>' :
           subs.map((s,i)=>`
-            <tr>
-              <td>${i+1}</td>
+            <tr data-search="${esc((s.stationName||'') + ' ' + (s.title||'') + ' ' + (s.firstName||'') + ' ' + (s.lastName||'') + ' ' + (s.school||'') + ' ' + (s.workTitle||'') + ' ' + (s.work||'')).toLowerCase()}">
+              <td class="row-num">${i+1}</td>
               <td>${esc(s.stationName||'-')}</td>
               <td>${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}</td>
               <td>${esc(s.school||'')}</td>
               <td style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.workTitle||s.work||'')}">${esc(s.workTitle||'-')}</td>
               <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.work||'')}">${esc(s.work||'-')}</td>
               <td>${s.fileUrl?`<a href="${esc(s.fileUrl)}" target="_blank" style="color:var(--gold-dark);text-decoration:underline">เปิด</a>`:'-'}</td>
+              <td style="white-space:nowrap">
+                <button onclick="editSubmission('${esc(s.id)}')" title="แก้ไข" style="padding:4px 8px;background:var(--cream);border:1px solid var(--gold-light);border-radius:6px;cursor:pointer;font-size:13px;margin-right:4px;color:var(--gold-deep)" onmouseover="this.style.background='var(--gold-light)'" onmouseout="this.style.background='var(--cream)'">✏️</button>
+                <button onclick="deleteSubmission('${esc(s.id)}','${esc(s.title||'')} ${esc(s.firstName||'')} ${esc(s.lastName||'')}')" title="ลบ" style="padding:4px 8px;background:#fff5f5;border:1px solid #fecaca;border-radius:6px;cursor:pointer;font-size:13px;color:#c43d3d" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff5f5'">🗑️</button>
+              </td>
             </tr>
           `).join('')}
         </tbody>
       </table>
     </div>
   `;
+}
+
+
+/* Force-refresh helpers (invalidate cache then reload) */
+async function _forceRefreshSubs(){
+  _cache.invalidate('submissions', getCurrentEvent()?.id);
+  await reloadSubmissionsReport();
+}
+async function _forceRefreshEvals(){
+  _cache.invalidate('evaluations', getCurrentEvent()?.id);
+  await reloadEvaluationsReport();
+}
+function filterSubTable(q){
+  const kw = q.trim().toLowerCase();
+  const tbody = document.getElementById('subTableBody');
+  if(!tbody) return;
+  const rows = tbody.querySelectorAll('tr[data-search]');
+  let visible = 0;
+  rows.forEach(row => {
+    const match = !kw || row.dataset.search.includes(kw);
+    row.style.display = match ? '' : 'none';
+    if(match) visible++;
+  });
+  // re-number visible rows
+  let n = 1;
+  rows.forEach(row => {
+    if(row.style.display !== 'none'){
+      const cell = row.querySelector('.row-num');
+      if(cell) cell.textContent = n++;
+    }
+  });
+  const countEl = document.getElementById('subSearchCount');
+  if(countEl){
+    countEl.textContent = kw ? `พบ ${visible} รายการ จากทั้งหมด ${rows.length} รายการ` : '';
+  }
 }
 
 /* ============================================================
@@ -1241,9 +1501,10 @@ async function renderReportEvaluations(app){
       <div class="page-head">
         <button class="back-btn" onclick="navigate('home')"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg></button>
         <div class="page-title">รายงานผลการประเมิน</div>
+        <button class="back-btn" title="โหลดข้อมูลใหม่" onclick="_forceRefreshEvals()" style="margin-left:auto"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
       </div>
       ${eventSelectorHTML()}
-      <div id="evalReportContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div></div>
+      <div id="evalReportContent"><div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span><div style="margin-top:10px">กำลังโหลดข้อมูล...<br><span style="font-size:12px;color:var(--ink-soft)">หากใช้เวลานาน ระบบจะลองใหม่อัตโนมัติ</span></div></div></div>
     </div>
   `;
   await reloadEvaluationsReport();
@@ -1253,7 +1514,15 @@ async function reloadEvaluationsReport(){
   const container = document.getElementById('evalReportContent');
   if(!container) return;
   const ev = getCurrentEvent();
-  const evals = await getEvaluations(ev.id);
+  container.innerHTML = '<div class="loading-state"><span class="loader" style="border-color:var(--gold);border-top-color:transparent"></span> กำลังโหลด...</div>';
+  let evals;
+  try{
+    evals = await getEvaluations(ev.id);
+  } catch(e){
+    _cache.invalidate('evaluations', ev.id);
+    container.innerHTML = _reportErrorHTML('reloadEvaluationsReport', e.message);
+    return;
+  }
   const cats = state.settings.questions;
   if(evals.length === 0){
     container.innerHTML = `<div class="loading-state">ยังไม่มีผู้ตอบแบบประเมิน</div>`;
@@ -2777,6 +3046,9 @@ async function confirmClearData(type){
     if(type==='evaluations'||type==='all') await deleteCol('evaluations','eventId');
     if(type==='judging'||type==='all') await deleteCol('judging','eventId');
     await batch.commit();
+    // Invalidate relevant caches
+    if(type==='submissions'||type==='all') _cache.invalidate('submissions', ev.id);
+    if(type==='evaluations'||type==='all') _cache.invalidate('evaluations', ev.id);
     await loading;
     Swal.fire({ icon:'success', title:'ลบข้อมูลเรียบร้อย', timer:2000, timerProgressBar:true, showConfirmButton:false });
     render();
